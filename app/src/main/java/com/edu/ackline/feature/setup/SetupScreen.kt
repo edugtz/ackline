@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -52,17 +53,22 @@ fun SetupScreen() {
         notificationGranted = granted
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
     ) {
-        Text(
-            text = "Ackline",
-            style = MaterialTheme.typography.headlineMedium,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = "Ackline",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
         Text(
             text = "Push setup",
             style = MaterialTheme.typography.titleMedium,
@@ -93,19 +99,29 @@ fun SetupScreen() {
         )
 
         val installationId = setupState.installationId
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SetupRow(
-                label = "Device ID",
-                value = installationId ?: "Waiting",
+        Column {
+            Text(
+                text = "Device ID",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (installationId != null) {
-                OutlinedButton(
-                    onClick = { copyDeviceId(context, installationId) },
-                ) {
-                    Text("Copy")
+            Spacer(Modifier.height(2.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = installationId ?: "Waiting",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                if (installationId != null) {
+                    OutlinedButton(
+                        onClick = { copyDeviceId(context, installationId) },
+                    ) {
+                        Text("Copy")
+                    }
                 }
             }
         }
@@ -114,6 +130,7 @@ fun SetupScreen() {
             label = "Last test message",
             value = setupState.lastMessageSummary ?: "Waiting for a message",
         )
+        }
     }
 }
 
@@ -128,6 +145,7 @@ private fun SetupRow(label: String, value: String) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

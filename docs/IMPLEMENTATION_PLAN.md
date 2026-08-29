@@ -1,19 +1,19 @@
-# Phase 0 — Project Foundation and FCM Registration Implementation Plan
+# Phase 1 — FCM Transport Reliability Gate Implementation Plan
 
 ## 1. Status
 
-**PLANNED — NOT IMPLEMENTED**
+**PLANNED — READY FOR PREFLIGHT**
 
 Phase:
 
 ```text
-0 — Project Foundation and FCM Registration
+1 — FCM Transport Reliability Gate
 ```
 
-Planned implementation branch:
+Implementation branch:
 
 ```text
-0-fcm-foundation
+1-fcm-reliability
 ```
 
 Base branch:
@@ -26,344 +26,720 @@ dev
 
 ## 2. Objective
 
-Create the minimum real Android + Firebase Messaging foundation needed to answer:
+Implement only the minimum Android and Mac sender functionality required to answer:
 
 ```text
-Can this device register with current FCM/FID APIs,
-and can the Mac target it with a fake data message?
+Can Ackline reliably receive user-visible IMPORTANT alerts on the physical Oppo
+through normal Android background conditions and Wi-Fi/mobile transitions
+without requiring the app to be manually opened?
 ```
 
-Do not solve persistence, acknowledgment, encryption, or production Hermes integration in this phase.
+This phase proves transport behavior.
+
+It does not build the persistent Ackline product yet.
 
 ---
 
-## 3. Product Quality Goal
+## 3. Existing Working Foundation
 
-The result should be intentionally small:
+Preserve the working Phase 0 implementation:
 
 ```text
-one Android app
-one setup/debug surface
-one messaging service
-one fake sender path
+Android project builds
+APK installs
+Ackline launches
+notification permission works
+Firebase Android configuration works
+FID registration works
+FID is visible/copyable
+FirebaseMessagingService receives data-only messages
+Mac Firebase Admin sender can target the FID
+Mac -> FCM -> Oppo -> Ackline baseline has been proven
+service-account credentials remain outside the repository
 ```
 
-No placeholder architecture for future work.
+Physical QA also identified and fixed the setup-screen dark-mode readability defect.
 
-No AI-generated dashboard look.
+Do not undo that fix.
+
+Do not redesign the setup screen.
 
 ---
 
-## 4. Preflight Requirements
+## 4. Product Quality Goal
 
-Before editing, confirm:
+The Phase 1 implementation should remain intentionally small:
 
-1. Whether the repository already exists.
-2. Current branch and git status.
-3. `dev` exists or must be created.
-4. Android Studio/SDK/JDK versions available.
-5. Final package/application ID.
-6. Current Firebase Android SDK setup requirements.
-7. Current Firebase Messaging/FID API surface.
-8. Whether Firebase BoM is appropriate for the chosen dependency setup.
-9. Exact location for the fake sender.
-10. Exact local location/environment variable for the service-account credential.
+```text
+existing Android app
+existing Firebase messaging boundary
+one small native notification component
+one repeatable sender harness
+focused deterministic tests
+physical-device reliability evidence
+```
 
-Do not guess package paths before project creation.
+No architecture expansion for future phases.
+
+No generic Clean Architecture layering.
+
+No new product UI.
 
 ---
 
-## 5. Repository / Branch Setup
+## 5. Preflight Requirements
 
-If creating a new repo:
+Before editing, inspect:
+
+1. `AGENTS.md`
+2. `docs/AI_WORKFLOW.md`
+3. `docs/CURRENT_PHASE.md`
+4. this `docs/IMPLEMENTATION_PLAN.md`
+5. relevant Phase 1 section of `docs/MVP_PHASES.md`
+6. `docs/ARCHITECTURE.md`
+7. current `AcklineMessagingService`
+8. current setup state/UI only as needed
+9. current manifest
+10. current Gradle dependencies
+11. current `tools/firebase_sender.py` if present
+12. current git status/diff
+
+Preflight must determine:
 
 ```text
-initialize repository
-create initial dev integration branch
-create 0-fcm-foundation from dev
+exact files to create
+exact files to modify
+whether manifest changes are actually needed
+how payload parsing remains bounded
+how channel mapping is represented
+how notification identity is generated
+how sender priority is configured
+which deterministic tests are worth adding
 ```
 
-If repo already exists:
+Preflight is read-only.
 
-```bash
-git status --short --untracked-files=all
-```
-
-Require a clean or intentionally understood state before implementation.
+Stop before editing.
 
 ---
 
-## 6. Android Project Setup
+## 6. Phase 1 Test Envelope
 
-Create a standard single-module Android project.
-
-Requirements:
+The sender and Android receiver use:
 
 ```text
-Kotlin
-Jetpack Compose
-Material 3
-single :app module
-current appropriate compileSdk/targetSdk
-minimum SDK chosen conservatively for personal use
-Gradle version catalog if generated/appropriate
+notification_id
+level
+title
+message
+sent_at
 ```
 
-Do not introduce:
+Required validation:
+
+### `notification_id`
 
 ```text
-Hilt
-Retrofit
-Room
-WorkManager
-Navigation graph unless genuinely needed for the one setup surface
-multi-module structure
+required
+non-blank
 ```
 
-A single `MainActivity` with one composable setup surface is sufficient.
+### `level`
+
+Must be exactly one of:
+
+```text
+remember
+important
+urgent
+```
+
+### `title`
+
+```text
+required
+non-blank
+```
+
+### `message`
+
+```text
+required
+non-blank
+```
+
+### `sent_at`
+
+```text
+required
+non-blank
+```
+
+Parsing a formal instant is optional if it would add unnecessary complexity to the spike.
+
+The value exists primarily to correlate sender and receiver timing.
+
+Malformed payload behavior:
+
+```text
+reject
+do not crash
+do not post notification
+emit bounded diagnostic metadata
+```
+
+Do not create the future Room entity.
 
 ---
 
-## 7. Firebase Setup
+## 7. FCM Priority Mapping
 
-### Firebase project/app
-
-- Create or select the Firebase project.
-- Register the final Android application ID.
-- Add standard Android Firebase configuration.
-- Add only the Messaging dependency required for Phase 0.
-- Follow current official setup at implementation time.
-
-### Registration
-
-Use the current FID registration mechanism.
-
-The app should maintain a simple setup state:
+The Mac sender must map:
 
 ```text
-registrationState
-installationId/FID
-notificationPermissionState
-lastFakeMessageSummary (optional, non-sensitive)
+remember   -> FCM NORMAL
+important  -> FCM HIGH
+urgent     -> FCM HIGH
 ```
 
-Do not make deprecated token APIs the primary design.
+Rationale:
+
+### Remember
+
+Can tolerate normal Doze batching.
+
+### Important
+
+Represents the main real-time Personal Admin alert type for reliability testing.
+
+### Urgent
+
+Also requires prompt transport but maps to a stronger Android presentation channel.
+
+Do not mark every FCM message high priority.
 
 ---
 
-## 8. Minimal Setup Screen
+## 8. Native Android Notification Channels
 
-The screen should be clean but intentionally utilitarian.
-
-Suggested content:
+Required channels:
 
 ```text
-Ackline
-
-Push setup
-
-Notification permission     Granted / Not granted
-FCM registration            Ready / Waiting / Error
-Device ID                   <FID>
-                            [Copy]
-
-Last test message           optional
+Ackline · Remember
+Ackline · Important
+Ackline · Urgent
 ```
 
-No cards-inside-cards or dashboard metrics.
+Required Android importance:
 
-No production inbox UI.
+```text
+Remember   -> NotificationManager.IMPORTANCE_LOW
+Important  -> NotificationManager.IMPORTANCE_DEFAULT
+Urgent     -> NotificationManager.IMPORTANCE_HIGH
+```
 
-Copying the FID should not require Logcat.
+Channel IDs should be stable and app-owned.
+
+Exact IDs can be implementation details such as:
+
+```text
+ackline_remember
+ackline_important
+ackline_urgent
+```
+
+Do not encode Firebase terminology into app-owned channel IDs.
 
 ---
 
-## 9. Minimal Messaging Service
+## 9. Notification Manager
 
-Create a small `FirebaseMessagingService`.
+Introduce one small Android notification component.
 
-Responsibilities in Phase 0:
-
-```text
-receive data message
-validate that expected test keys exist
-record/log non-sensitive test metadata
-surface enough state to prove app code received it
-```
-
-It does not:
+Expected class:
 
 ```text
-persist Room alerts
-acknowledge
-decrypt
-show production inbox
-call Hermes
+AcklineNotificationManager
 ```
 
-The production local Android notification behavior belongs to Phase 1.
+Preferred package:
 
-If showing a minimal test notification materially helps Phase 0 verification, keep it explicitly development-only and do not pre-implement full severity/ACK behavior.
-
----
-
-## 10. Mac / Python Sender Spike
-
-Use current Firebase Admin SDK.
+```text
+com.edu.ackline.notifications
+```
 
 Responsibilities:
 
 ```text
-load service credentials externally
-read target FID from protected local config or explicit safe input
-send one data-only fake message
-return transport success/error
-never print credential contents
+ensure channels exist
+accept app-owned alert/test data
+select channel from level
+build native Android notification
+post native Android notification
+return/capture displayed timestamp if useful
 ```
 
-Fake payload example:
+The public API should not require Firebase SDK types.
 
-```json
-{
-  "protocol": "1",
-  "notification_id": "phase0-test-001",
-  "level": "important",
-  "title": "FCM test",
-  "message": "Non-sensitive Phase 0 payload",
-  "created_at": "2026-08-28T00:00:00Z"
-}
+For example conceptually:
+
+```text
+show(
+    notificationId,
+    level,
+    title,
+    message
+)
 ```
 
-Do not use real email/calendar/task content.
+Exact Kotlin shape is determined during implementation.
+
+Do not add an interface merely to wrap one implementation unless testing requires a compelling reason.
 
 ---
 
-## 11. Secret Handling
+## 10. Native Notification Content
 
-Service-account credentials:
-
-```text
-outside Android
-outside repository
-outside prompts
-outside logs
-```
-
-Recommended pattern:
+Phase 1 native notifications need only:
 
 ```text
-GOOGLE_APPLICATION_CREDENTIALS=/protected/path/service-account.json
+Ackline app identity
+title
+message
+correct channel
+reasonable small icon
 ```
 
-or another current Admin SDK credential mechanism validated at implementation time.
+No actions are required.
 
-The Firebase Android config file is not the service-account private key; still review repository hygiene before committing.
+Do not add:
+
+```text
+Visto
+Open / detail routing
+reply
+snooze
+group management
+persistent inbox behavior
+```
+
+Tapping behavior may remain minimal unless Android requires a pending intent for normal usability.
+
+Do not accidentally make notification interaction imply acknowledgment.
 
 ---
 
-## 12. Exact Files — Discovery First
+## 11. Notification Identity
 
-Because the repo may not exist yet, exact package paths must be confirmed during bootstrap.
+Phase 1 does not yet have Room-backed deduplication.
 
-Expected production files are limited to the project skeleton plus roughly:
+Use a deterministic/bounded Android notification identity derived from `notification_id` or another simple stable method.
 
-```text
-MainActivity.kt
-SetupScreen.kt
-AcklineMessagingService.kt
-small setup/registration state holder if needed
-```
-
-Expected non-Android sender file:
+Requirements:
 
 ```text
-one firebase sender spike
+same test notification_id does not require an ever-growing ID registry
+different normal test IDs can coexist sufficiently for QA
+no database introduced
 ```
 
-Do not create:
+Do not implement final delivery deduplication semantics yet.
 
-```text
-database/
-repository/
-ack/
-security/
-inbox/
-detail/
-sync/
-```
-
-packages until their phases require them.
+That belongs to Phase 2 with Room as local truth.
 
 ---
 
-## 13. Implementation Order
+## 12. Messaging Service Changes
 
-1. Initialize/inspect repository.
-2. Establish `dev`.
-3. Create `0-fcm-foundation`.
-4. Create Android project.
-5. Confirm clean `assembleDebug`.
-6. Register Firebase Android app.
-7. Add Firebase Messaging dependency/plugin/config.
-8. Implement FID registration handling.
-9. Implement minimal setup surface.
-10. Implement minimal messaging service.
-11. Build/install on Oppo.
-12. Copy FID.
-13. Create/configure fake Python sender.
-14. Send fake data message.
-15. Confirm app code receives it.
-16. Run validation.
-17. Run manual QA.
-18. Independent review if used.
-19. User commits/pushes.
-20. ChatGPT reviews pushed branch through GitHub.
-21. Merge only after PASS.
+Keep:
 
----
+```text
+AcklineMessagingService
+```
 
-## 14. Risks / Build Traps
+as the Firebase-specific boundary.
 
-### Firebase API drift
+Phase 1 flow:
 
-The exact FID callback/API must be checked against current official docs at implementation time.
+```text
+onMessageReceived
+        ↓
+extract data map
+        ↓
+validate notification_id
+validate level
+validate title
+validate message
+validate sent_at
+        ↓
+capture received_at
+        ↓
+build app-owned values
+        ↓
+AcklineNotificationManager.show(...)
+        ↓
+bounded diagnostic log
+```
 
-Do not copy a stale tutorial.
+The service must remain small.
 
-### Android permission behavior
+Do not inject:
 
-Notification runtime permission behavior must match the actual target/device API.
+```text
+Room
+repository
+WorkManager
+ACK logic
+network client
+Hermes logic
+```
 
-### ColorOS
-
-Do not diagnose Phase 1 reliability during Phase 0 unless Phase 0 cannot receive even the baseline message.
-
-### Secret leakage
-
-Do not paste service-account JSON or real FID into cloud AI conversations or public GitHub.
-
-### Scope creep
-
-It is tempting to add Room/inbox immediately. Do not.
-
-### Over-abstracted transport
-
-Do not create a generic multi-provider plugin system. One small boundary is enough.
+into the service.
 
 ---
 
-## 15. Validation Commands
+## 13. Registration Behavior
 
-Minimum:
+Preserve the existing current FID registration flow.
+
+Do not migrate back to deprecated token-first registration.
+
+Do not change:
+
+```text
+FID display/copy
+registration state
+working Firebase initialization
+```
+
+unless a concrete bug requires it.
+
+Phase 1 is about message delivery, not registration redesign.
+
+---
+
+## 14. Setup Screen
+
+Preserve the existing setup/debug screen.
+
+It can continue displaying:
+
+```text
+Notification permission
+FCM registration
+Device ID
+Copy
+Last test message
+```
+
+The existing dark-mode readability fix must remain intact.
+
+Do not spend Phase 1 building the final inbox UI.
+
+If adding a tiny diagnostic value to the setup screen would materially simplify QA, preflight must justify it before implementation.
+
+Prefer Logcat/notification behavior over expanding UI diagnostics.
+
+---
+
+## 15. Mac / Python Sender
+
+Use the existing sender file if it already exists:
+
+```text
+tools/firebase_sender.py
+```
+
+Do not create a second sender.
+
+Required command shape:
 
 ```bash
-./gradlew clean assembleDebug
+python tools/firebase_sender.py \
+  --fid "$ACKLINE_FID" \
+  --id "test-id" \
+  --level important \
+  --title "Ackline test" \
+  --message "Non-sensitive Phase 1 test"
 ```
 
-If configured:
+Required arguments:
+
+```text
+--fid
+--id
+--level
+```
+
+Title/message may have sensible fake defaults.
+
+Supported `--level` values:
+
+```text
+remember
+important
+urgent
+```
+
+Unsupported level:
+
+```text
+fail locally before sending
+```
+
+Sender generates:
+
+```text
+sent_at
+```
+
+using UTC.
+
+Sender should print enough information for QA, for example:
+
+```text
+notification_id
+level
+sent_at
+FCM acceptance result
+```
+
+Do not print the target FID unnecessarily.
+
+---
+
+## 16. Firebase Admin Credentials
+
+Continue using external credentials.
+
+Recommended current development pattern:
+
+```text
+GOOGLE_APPLICATION_CREDENTIALS
+```
+
+Credential location remains outside the repository.
+
+Never commit:
+
+```text
+service-account JSON
+private_key
+credential copy
+FID config containing secrets
+```
+
+The Android `google-services.json` is not the Firebase Admin private credential.
+
+Phase 1 should not alter credential architecture.
+
+---
+
+## 17. Timestamp Diagnostics
+
+Use UTC timestamps for correlation.
+
+Sender:
+
+```text
+sent_at
+```
+
+Android:
+
+```text
+received_at
+displayed_at
+```
+
+Useful diagnostic line concept:
+
+```text
+notification_id=test-wifi-mobile-01
+level=important
+sent_at=...
+received_at=...
+displayed_at=...
+```
+
+Do not log message bodies unless a fake test payload makes it useful during a bounded debugging session.
+
+Normal implementation should prefer metadata.
+
+---
+
+## 18. Automated Tests
+
+Only add tests that validate deterministic app logic.
+
+High-value candidates:
+
+### Level validation
+
+```text
+remember accepted
+important accepted
+urgent accepted
+other rejected
+blank rejected
+```
+
+### Level -> channel mapping
+
+```text
+remember -> Remember
+important -> Important
+urgent -> Urgent
+```
+
+### Envelope validation
+
+Examples:
+
+```text
+missing notification_id rejected
+blank title rejected
+missing sent_at rejected
+unsupported level rejected
+valid payload accepted
+```
+
+### Sender validation
+
+If practical without unnecessary Python test infrastructure:
+
+```text
+invalid --level rejected
+priority mapping correct
+```
+
+Do not create large test scaffolding for three mappings.
+
+Do not pretend unit tests prove FCM or Doze reliability.
+
+---
+
+## 19. Expected File Scope
+
+Likely production changes:
+
+```text
+MODIFY
+app/src/main/java/com/edu/ackline/push/AcklineMessagingService.kt
+
+CREATE
+app/src/main/java/com/edu/ackline/notifications/AcklineNotificationManager.kt
+
+MODIFY
+tools/firebase_sender.py
+```
+
+Potential bounded changes:
+
+```text
+app/src/main/AndroidManifest.xml
+```
+
+only if native notification behavior requires a real manifest change.
+
+Potential tests:
+
+```text
+app/src/test/java/.../
+```
+
+only for deterministic logic worth testing.
+
+Do not modify unrelated project files.
+
+---
+
+## 20. Explicitly Out of Scope
+
+Do not implement:
+
+```text
+Room
+SQLite local inbox
+AlertEntity
+DAO
+Repository layer for alerts
+InboxScreen
+AlertDetailScreen
+Pendientes / Vistas
+Visto
+acknowledgedAt
+ackSyncState
+notification Visto action
+remote ACK
+AckClient
+AckSyncWorker
+WorkManager
+Tailscale HTTP
+E2EE
+AES-GCM
+Android Keystore
+Hermes outbox integration
+notification_state.py changes
+reconciliation
+onDeletedMessages recovery workflow
+search
+settings architecture
+authentication
+analytics
+multi-device support
+Play Store work
+foreground service
+persistent socket
+MQTT
+ntfy integration
+OEM-specific service
+battery exemption request
+```
+
+Do not add placeholders for them.
+
+---
+
+## 21. Implementation Order
+
+After approved preflight:
+
+1. Re-read current files before editing.
+2. Confirm working tree is understood.
+3. Implement minimal Phase 1 envelope validation.
+4. Add native notification manager.
+5. Create required notification channels.
+6. Wire messaging service to native notification component.
+7. Extend existing sender with level/timestamp/priority support.
+8. Add narrowly useful deterministic tests.
+9. Run Android validation.
+10. Run Python syntax validation.
+11. Inspect final diff for scope creep.
+12. Perform physical smoke tests.
+13. Stop and diagnose if smoke tests fail.
+14. Run independent code review.
+15. Resolve blocking review findings.
+16. Run full Oppo reliability matrix.
+17. Run multi-hour real-use test.
+18. User commits/pushes.
+19. ChatGPT reviews pushed branch using GitHub.
+20. Merge to `dev` only after PASS.
+
+---
+
+## 22. Automated Validation Commands
+
+Android:
 
 ```bash
-./gradlew lintDebug testDebugUnitTest assembleDebug
+./gradlew clean lintDebug testDebugUnitTest assembleDebug
+```
+
+Python:
+
+```bash
+python -m py_compile tools/firebase_sender.py
 ```
 
 Git hygiene:
@@ -373,84 +749,553 @@ git status --short --untracked-files=all
 git diff --check
 ```
 
-Python sender:
+Inspect scope:
 
-- run one fake send;
-- verify successful Admin SDK response;
-- verify app receives message;
-- verify no secret is printed.
-
----
-
-## 16. Manual QA
-
-On the Oppo:
-
-```text
-PASS — APK installs
-PASS — app opens
-PASS — setup screen renders
-PASS — notification permission state is understandable
-PASS — FCM registration becomes ready
-PASS — FID appears
-PASS — copy FID works
-PASS — fake Mac sender succeeds
-PASS — app code receives fake data message
-PASS — no crash
-PASS — no sensitive payload used
+```bash
+git diff --stat dev...
 ```
 
-Phase 0 does not require the Wi-Fi/5G/Doze matrix.
+Do not hide unrelated dirty files.
 
 ---
 
-## 17. AI Implementation / Review Route
+## 23. Initial Physical Smoke Test
 
-### Planning
+Do this before the full matrix.
+
+### Smoke A — Foreground
+
+State:
+
+```text
+Wi-Fi connected
+Ackline open
+screen on
+IMPORTANT
+```
+
+Expected:
+
+```text
+native Android notification appears
+```
+
+### Smoke B — Background
+
+State:
+
+```text
+Wi-Fi connected
+Ackline sent to background with Home
+screen on
+IMPORTANT
+```
+
+Expected:
+
+```text
+native Android notification appears
+without reopening Ackline
+```
+
+### Smoke C — Removed from Recents
+
+State:
+
+```text
+Wi-Fi connected
+Ackline removed from Recents
+not Force Stopped
+IMPORTANT
+```
+
+Expected:
+
+```text
+native Android notification appears
+without reopening Ackline
+```
+
+If any of these fail:
+
+```text
+STOP
+diagnose
+do not run the complete matrix
+```
+
+---
+
+## 24. Baseline Reliability Matrix
+
+After smoke passes:
+
+### Test 1 — Foreground Wi-Fi
+
+```text
+app foreground
+Wi-Fi
+IMPORTANT
+```
+
+Expected:
+
+```text
+arrives
+```
+
+### Test 2 — Background Wi-Fi
+
+```text
+app background
+Wi-Fi
+IMPORTANT
+```
+
+Expected:
+
+```text
+arrives without opening app
+```
+
+### Test 3 — Removed from Recents
+
+```text
+app removed from Recents
+Wi-Fi
+IMPORTANT
+```
+
+Expected:
+
+```text
+arrives without opening app
+```
+
+### Test 4 — Screen Off
+
+```text
+app background
+Wi-Fi
+screen off
+IMPORTANT
+```
+
+Expected:
+
+```text
+arrives
+```
+
+### Test 5 — Mobile Data Only
+
+```text
+Wi-Fi off
+mobile data working
+app background
+IMPORTANT
+```
+
+Expected:
+
+```text
+arrives
+```
+
+---
+
+## 25. Network Transition Matrix
+
+### Test 6 — Wi-Fi -> Mobile
+
+Start:
+
+```text
+Wi-Fi connected
+app not foreground
+```
+
+Transition:
+
+```text
+disable/leave Wi-Fi
+mobile network takes over
+```
+
+Send IMPORTANT after mobile connectivity is usable.
+
+Expected:
+
+```text
+arrives without opening Ackline
+```
+
+### Test 7 — Mobile -> Wi-Fi
+
+Start:
+
+```text
+mobile data
+app not foreground
+```
+
+Transition:
+
+```text
+connect Wi-Fi
+```
+
+Send after Wi-Fi becomes usable.
+
+Expected:
+
+```text
+arrives without opening Ackline
+```
+
+### Test 8 — Send During Transition
+
+Send while connectivity is changing.
+
+Expected:
+
+```text
+delivery may be delayed
+but eventually occurs automatically
+without opening Ackline
+```
+
+The exact latency is diagnostic, not the primary pass criterion.
+
+---
+
+## 26. Temporary Offline Recovery
+
+### Test 9 — Airplane Recovery
+
+Procedure:
+
+```text
+Ackline not foreground
+airplane mode ON
+send IMPORTANT from Mac
+wait approximately 2 minutes
+airplane mode OFF
+wait for usable network
+DO NOT OPEN ACKLINE
+```
+
+Expected:
+
+```text
+message eventually arrives automatically
+```
+
+Failure:
+
+```text
+message remains absent
+opening Ackline causes it to appear
+```
+
+This is a critical failure.
+
+---
+
+## 27. Idle / Screen-Off Test
+
+### Test 10 — Natural Idle
+
+Procedure:
+
+```text
+screen off
+leave phone untouched 10–20 minutes
+send IMPORTANT
+```
+
+Expected:
+
+```text
+notification arrives without opening Ackline
+```
+
+Record latency.
+
+---
+
+## 28. Doze Test
+
+Use ADB only after ordinary screen-off/background behavior works.
+
+A controlled Doze procedure may use current Android tooling such as:
+
+```bash
+adb shell dumpsys deviceidle force-idle
+```
+
+Exact command must be verified against the connected device/runtime before use.
+
+Send:
+
+```text
+IMPORTANT
+```
+
+Expected:
+
+```text
+high-priority user-visible FCM alert arrives without opening Ackline
+```
+
+After test, restore normal device idle state.
+
+Do not classify a `remember` NORMAL-priority message delayed by Doze as a Phase 1 transport failure; delayed normal-priority delivery may be intentional.
+
+---
+
+## 29. Multi-Hour Real-Use Test
+
+After controlled cases pass, use the Oppo normally for several hours.
+
+Conditions should naturally include some of:
+
+```text
+screen off/on
+Wi-Fi movement
+mobile data
+background apps
+normal phone usage
+Ackline not manually reopened for testing
+```
+
+Send multiple uniquely identified IMPORTANT test messages.
+
+Goal:
+
+```text
+detect reconnect-dependent failure
+```
+
+Not:
+
+```text
+collect artificial benchmark latency statistics
+```
+
+Every sent notification should be accounted for.
+
+---
+
+## 30. Critical Failure Rule
+
+Phase 1 fails if reproducibly:
+
+```text
+working network
++
+IMPORTANT message missing
++
+opening Ackline makes the missing message arrive
+or restores subsequent FCM delivery
+```
+
+This behavior is unacceptable even if Firebase technically accepted the message.
+
+It reproduces the user-visible failure Ackline exists to solve.
+
+---
+
+## 31. Acceptable Temporary Delay
+
+These situations can produce reasonable temporary delay:
+
+```text
+no network
+network handoff still in progress
+brief radio reconnection
+device transition from offline -> online
+```
+
+The key distinction is:
+
+```text
+automatic recovery = potentially PASS
+manual Ackline launch required = FAIL
+```
+
+Record unusual delay rather than immediately inventing a workaround.
+
+---
+
+## 32. Force Stop Test
+
+Do not include explicit Android Force Stop in the normal reliability matrix.
+
+Force Stop is separate Android behavior.
+
+If tested:
+
+```text
+document separately
+do not confuse with Recents swipe/background behavior
+```
+
+Do not modify the application to defeat Force Stop semantics.
+
+---
+
+## 33. ColorOS Escalation
+
+No ColorOS workaround during initial implementation.
+
+If a stock test fails:
+
+1. reproduce the exact case;
+2. record network/app/screen state;
+3. confirm FCM sender acceptance;
+4. inspect bounded Logcat/Play Services evidence;
+5. determine whether `onMessageReceived` ran;
+6. compare behavior before and after manually opening Ackline;
+7. use current Android/FCM/Oppo evidence;
+8. consult Gemini Android Studio for Android/OEM-specific diagnosis if useful;
+9. propose the smallest mitigation only after evidence exists.
+
+Do not immediately:
+
+```text
+disable all battery optimizations
+require lock-in-recents
+add foreground service
+create custom persistent socket
+```
+
+Those would compromise the purpose of the reliability gate.
+
+---
+
+## 34. QA Record Format
+
+Maintain a simple manual record:
+
+```text
+notification_id:
+level:
+sent_at:
+network:
+screen:
+app state:
+received/displayed:
+latency:
+result:
+notes:
+```
+
+Example:
+
+```text
+notification_id: wifi-mobile-004
+level: important
+sent_at: 2026-08-29T20:14:02Z
+network: Wi-Fi -> mobile
+screen: off
+app state: background
+received/displayed: 2026-08-29T20:14:05Z
+latency: ~3s
+result: PASS
+notes: no app reopen
+```
+
+Use fake payloads only.
+
+---
+
+## 35. Review Requirements
+
+After implementation and automated validation, run:
+
+```text
+/local-review
+Qwen3.8 27B AWQ 5bpw + Lightning MTP
+```
+
+Reviewer is read-only.
+
+Review must focus on:
+
+```text
+FCM remains data-only
+payload validation
+priority mapping
+notification channel mapping
+native notification independence from UI
+Firebase boundary
+secret hygiene
+scope discipline
+absence of premature future architecture
+tests are meaningful
+dark-mode fix preserved
+```
+
+Verdict:
+
+```text
+PASS
+PASS_WITH_NOTES
+BLOCKED
+```
+
+Blocking findings are resolved before the full reliability gate is considered complete.
+
+---
+
+## 36. AI Route
+
+### Planner
 
 ```text
 ChatGPT + GitHub
 ```
 
-### Discovery / preflight
+Planning is complete in these documents.
 
-Preferred options:
-
-```text
-/cloud-mimo
-```
-
-for cheap discovery/preflight when the phase is already planned, or:
-
-```text
-/local-build
-```
-
-for same-agent local preflight + implementation.
-
-Preflight stops for approval.
-
-### Default builder
+### Preflight / Builder
 
 ```text
 /local-build
 Qwen3.8 27B 4bit + DFlash2
 ```
 
-### Quality local fallback
+Preflight stops before editing.
+
+### Quality fallback
 
 ```text
 /local-quality
 Qwen3.8 27B 5bit + DFlash2
 ```
 
-### Android platform specialist
+Use only if the default builder cannot complete a bounded implementation cleanly.
+
+### Android specialist
 
 ```text
 Gemini Android Studio
 ```
 
-Use for Firebase plugin/Gradle/manifest/FID/runtime issues.
+Use for concrete:
+
+```text
+Gradle
+manifest
+Firebase runtime
+notification runtime
+Doze
+Play Services
+ColorOS
+```
+
+problems.
 
 ### Independent reviewer
 
@@ -459,7 +1304,7 @@ Use for Firebase plugin/Gradle/manifest/FID/runtime issues.
 Qwen3.8 27B AWQ 5bpw + Lightning MTP
 ```
 
-Review only; no edits.
+No edits.
 
 ### Frontier escalation
 
@@ -467,54 +1312,103 @@ Review only; no edits.
 GPT-5.6 Sol Codex
 ```
 
-Not expected for normal Phase 0 work. Use only if tooling/repo state becomes unusually risky.
+Not expected for normal Phase 1 work.
+
+Use only if a genuinely high-risk or unusually difficult engineering issue appears.
 
 ### Final review
-
-After user commit/push:
 
 ```text
 ChatGPT + GitHub
 ```
 
-End with:
-
-```text
-PASS
-PASS_WITH_NOTES
-BLOCKED
-```
+after the user commits and pushes.
 
 ---
 
-## 18. Completion Criteria
+## 37. Completion Criteria
 
 All must be true:
 
 ```text
-single-module Android project exists
-dev + phase branch workflow established
-assembleDebug passes
-APK installs
-Firebase setup valid
-FID registration works
-FID copy works
-fake data message reaches app code
-service-account secrets external
-no sensitive payload used
-no future-phase work
-manual QA passes
-final pushed-branch GitHub review PASS
+Phase 1 code remains small
+FCM remains data-only
+native Android notifications work
+level validation works
+FCM priority mapping correct
+Android channel mapping correct
+malformed input fails safely
+credentials remain external
+automated validation passes
+initial Oppo smoke tests pass
+Wi-Fi baseline passes
+mobile baseline passes
+Wi-Fi -> mobile passes
+mobile -> Wi-Fi passes
+send-during-transition recovers automatically
+airplane-mode recovery works automatically
+screen-off test passes
+IMPORTANT Doze test passes
+multi-hour normal-use test passes
+no manual Ackline reopening required
+no unjustified ColorOS workaround
+independent review passes
+final GitHub review PASS
 ```
 
 ---
 
-## 19. Suggested Commit
+## 38. Phase Exit
+
+After final PASS:
 
 ```text
-chore: add Android and FCM foundation
+1-fcm-reliability
+        ↓
+merge
+        ↓
+dev
 ```
+
+Then create the Phase 2 branch from updated `dev`.
+
+Phase 2 is:
+
+```text
+Persistent Inbox and Alert Detail
+```
+
+Only then introduce:
+
+```text
+Room
+local persistent truth
+notificationId deduplication
+Inbox
+Pendientes / Vistas
+Alert detail
+```
+
+Do not begin those features inside Phase 1.
+
+---
+
+## 39. Suggested Commits
+
+Planning:
+
+```text
+docs: plan Phase 1 FCM reliability gate
+```
+
+Implementation:
+
+```text
+feat: prove FCM background delivery
+```
+
+If additional fixes are discovered during physical QA, keep them narrowly scoped and separately understandable where useful.
 
 Do not commit automatically.
 
-The user owns commit and push.
+The user owns commits and pushes.

@@ -24,9 +24,19 @@ class AcklineMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         val data = remoteMessage.data
-        val notificationId = data["notification_id"] ?: "unknown"
-        val title = data["title"] ?: ""
-        val message = data["message"] ?: ""
+        val notificationId = data["notification_id"]
+        val title = data["title"]
+        val message = data["message"]
+
+        // Phase 0 payload validation: all three fields must be present and
+        // non-blank. Invalid payloads are rejected generically — no crash and
+        // no payload contents in logs.
+        if (notificationId.isNullOrBlank() || title.isNullOrBlank() || message.isNullOrBlank()) {
+            Log.w(TAG, "invalid Phase 0 data message")
+            SetupState.onMessageReceived("Invalid test message")
+            return
+        }
+
         Log.i(TAG, "fake data message received: notification_id=$notificationId")
         SetupState.onMessageReceived("#$notificationId · $title — $message")
     }

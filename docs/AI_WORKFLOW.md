@@ -1,8 +1,8 @@
-# Hermes Notifications — AI Workflow (August 2026)
+# Ackline — AI Workflow (August 2026)
 
 ## Purpose
 
-This document defines the operational AI-assisted development workflow for Hermes Notifications.
+This document defines the operational AI-assisted development workflow for Ackline.
 
 The strategy is aligned with the current GymLedger `dev` workflow, but adapted to a smaller Android + FCM + Hermes integration project.
 
@@ -70,7 +70,7 @@ Actual source code is authoritative for exact paths/APIs once it exists.
 
 ## 2. Product / Architecture Non-Negotiables
 
-Hermes Notifications is:
+Ackline is:
 
 ```text
 single-user

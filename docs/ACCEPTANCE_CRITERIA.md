@@ -1,4 +1,4 @@
-# Hermes Notifications — Acceptance Criteria
+# Ackline — Acceptance Criteria
 
 ## 1. Global MVP Acceptance
 
@@ -49,7 +49,7 @@ network works
 +
 alert does not arrive
 +
-opening Hermes Notifications causes it to arrive
+opening Ackline causes it to arrive
 ```
 
 If reproducible in normal use, the push solution is not accepted.

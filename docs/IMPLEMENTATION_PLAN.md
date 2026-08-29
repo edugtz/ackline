@@ -158,7 +158,7 @@ The screen should be clean but intentionally utilitarian.
 Suggested content:
 
 ```text
-Hermes Notifications
+Ackline
 
 Push setup
 
@@ -270,7 +270,7 @@ Expected production files are limited to the project skeleton plus roughly:
 ```text
 MainActivity.kt
 SetupScreen.kt
-HermesMessagingService.kt
+AcklineMessagingService.kt
 small setup/registration state holder if needed
 ```
 

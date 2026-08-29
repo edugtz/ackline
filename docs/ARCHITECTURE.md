@@ -1,4 +1,4 @@
-# Hermes Notifications — Architecture
+# Ackline — Architecture
 
 ## 1. Architecture Goal
 
@@ -412,7 +412,7 @@ app/
     MainActivity.kt
     app/
     push/
-      HermesMessagingService.kt
+      AcklineMessagingService.kt
       IncomingAlertEnvelope.kt
     data/
       db/

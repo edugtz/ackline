@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408384736087",
+    "project_id": "ackline-55c34",
+    "storage_bucket": "ackline-55c34.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408384736087:android:886cae9a43d212613bcc12",
+        "android_client_info": {
+          "package_name": "com.edu.ackline"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC7Iw47mSzELj00EgSStalGbY4-zVAsCW4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

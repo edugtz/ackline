@@ -46,7 +46,7 @@ Phase 1 is the actual background/network-transition reliability gate.
 
 ## Product Principles
 
-Hermes Notifications remains:
+Ackline remains:
 
 ```text
 single-user
@@ -185,7 +185,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 app/src/main/AndroidManifest.xml
 app/src/main/java/.../MainActivity.kt
-app/src/main/java/.../push/HermesMessagingService.kt
+app/src/main/java/.../push/AcklineMessagingService.kt
 app/src/main/java/.../feature/setup/SetupScreen.kt
 ```
 

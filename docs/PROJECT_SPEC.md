@@ -1,8 +1,8 @@
-# Hermes Notifications — Project Specification
+# Ackline — Project Specification
 
 ## 1. Product Summary
 
-Hermes Notifications is a private Android inbox for alerts produced by Hermes Personal Admin.
+Ackline is a private Android inbox for alerts produced by Hermes Personal Admin.
 
 Hermes already performs source monitoring, incremental state tracking, cheap filtering, LLM analysis, prioritization, and deduplication. This Android app does **not** duplicate those responsibilities.
 

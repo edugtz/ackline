@@ -1,4 +1,4 @@
-# Hermes Notifications — MVP Phases
+# Ackline — MVP Phases
 
 This file is the detailed MVP roadmap.
 
@@ -168,7 +168,7 @@ mobile data works
 +
 alert does not arrive
 +
-opening Hermes Notifications makes it arrive
+opening Ackline makes it arrive
 =
 FAIL
 ```

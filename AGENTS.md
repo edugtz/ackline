@@ -1,4 +1,4 @@
-# Hermes Notifications — Agent Rules
+# Ackline — Agent Rules
 
 ## 1. Source of Truth
 
@@ -26,7 +26,7 @@ If docs conflict with code, stop and report the mismatch before editing.
 
 ## 2. Current Product Principle
 
-Hermes Notifications is a small Android client around this pipeline:
+Ackline is a small Android client around this pipeline:
 
 ```text
 Hermes SQLite/outbox
@@ -96,7 +96,7 @@ Prompts are useful for builder preflight, implementation, critic/review, debug, 
 
 ## 5. Product Non-Negotiables
 
-Hermes Notifications is:
+Ackline is:
 
 ```text
 single-user

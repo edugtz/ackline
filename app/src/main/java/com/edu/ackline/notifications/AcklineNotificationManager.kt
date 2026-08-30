@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.edu.ackline.model.AlertLevel
 
 /**
  * Small Phase 1 boundary for creating native Android notifications.
@@ -25,17 +26,17 @@ object AcklineNotificationManager {
     )
 
     private val channelDefinitions = mapOf(
-        "remember" to ChannelDefinition(
+        AlertLevel.REMEMBER to ChannelDefinition(
             id = REMEMBER_CHANNEL_ID,
             name = "Ackline · Remember",
             importance = NotificationManager.IMPORTANCE_LOW,
         ),
-        "important" to ChannelDefinition(
+        AlertLevel.IMPORTANT to ChannelDefinition(
             id = IMPORTANT_CHANNEL_ID,
             name = "Ackline · Important",
             importance = NotificationManager.IMPORTANCE_DEFAULT,
         ),
-        "urgent" to ChannelDefinition(
+        AlertLevel.URGENT to ChannelDefinition(
             id = URGENT_CHANNEL_ID,
             name = "Ackline · Urgent",
             importance = NotificationManager.IMPORTANCE_HIGH,
@@ -43,12 +44,20 @@ object AcklineNotificationManager {
     )
 
     /** Returns the stable app-owned channel ID for a validated level. */
+    internal fun channelIdForLevel(level: AlertLevel): String =
+        channelDefinitions.getValue(level).id
+
+    /** Compatibility helper for the Phase 1 channel mapping tests. */
     internal fun channelIdForLevel(level: String): String? =
-        channelDefinitions[level]?.id
+        AlertLevel.fromWireValue(level)?.let(::channelIdForLevel)
 
     /** Returns the Android channel importance for a validated level. */
+    internal fun channelImportanceForLevel(level: AlertLevel): Int =
+        channelDefinitions.getValue(level).importance
+
+    /** Compatibility helper for the Phase 1 channel mapping tests. */
     internal fun channelImportanceForLevel(level: String): Int? =
-        channelDefinitions[level]?.importance
+        AlertLevel.fromWireValue(level)?.let(::channelImportanceForLevel)
 
     /**
      * Posts one native notification and reports whether the post was attempted
@@ -58,7 +67,7 @@ object AcklineNotificationManager {
     fun show(
         context: Context,
         notificationId: String,
-        level: String,
+        level: AlertLevel,
         title: String,
         message: String,
     ): Boolean {
@@ -102,6 +111,24 @@ object AcklineNotificationManager {
             false
         }
     }
+
+    /** Compatibility overload for callers that still hold a validated wire value. */
+    fun show(
+        context: Context,
+        notificationId: String,
+        level: String,
+        title: String,
+        message: String,
+    ): Boolean =
+        AlertLevel.fromWireValue(level)?.let {
+            show(
+                context = context,
+                notificationId = notificationId,
+                level = it,
+                title = title,
+                message = message,
+            )
+        } ?: false
 
     private fun canPostNotifications(
         context: Context,

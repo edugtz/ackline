@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,7 +41,7 @@ import com.edu.ackline.SetupState
  * device ID (FID), and the last fake test message. No production inbox UI.
  */
 @Composable
-fun SetupScreen() {
+fun SetupScreen(onBack: (() -> Unit)? = null) {
     val setupState by SetupState.state.collectAsState()
     val context = LocalContext.current
 
@@ -64,6 +65,14 @@ fun SetupScreen() {
                 .padding(horizontal = 24.dp, vertical = 32.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            if (onBack != null) {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.align(Alignment.Start),
+                ) {
+                    Text("Volver")
+                }
+            }
             Text(
                 text = "Ackline",
                 style = MaterialTheme.typography.headlineMedium,

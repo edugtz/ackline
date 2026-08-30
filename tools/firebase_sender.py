@@ -17,26 +17,27 @@ FCM_PRIORITY_BY_LEVEL = {
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fid", required=True)
-    parser.add_argument("--id", default="test-001")
+    parser.add_argument("--id", default="phase2-test-001")
     parser.add_argument("--level", choices=FCM_PRIORITY_BY_LEVEL, default="important")
     parser.add_argument("--title", default="Ackline test")
-    parser.add_argument("--message", default="Non-sensitive Phase 1 test")
+    parser.add_argument("--message", default="Non-sensitive Phase 2 test")
     args = parser.parse_args()
 
     firebase_admin.initialize_app()
 
-    sent_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     priority = FCM_PRIORITY_BY_LEVEL[args.level]
 
     message = messaging.Message(
         fid=args.fid,
         android=messaging.AndroidConfig(priority=priority),
         data={
+            "protocol": "1",
             "notification_id": args.id,
             "level": args.level,
             "title": args.title,
             "message": args.message,
-            "sent_at": sent_at,
+            "created_at": created_at,
         },
     )
 
@@ -45,7 +46,7 @@ def main():
     print(f"notification_id: {args.id}")
     print(f"level:           {args.level}")
     print(f"priority:        {priority}")
-    print(f"sent_at:         {sent_at}")
+    print(f"created_at:      {created_at}")
     print(f"FCM accepted:    {response}")
 
 

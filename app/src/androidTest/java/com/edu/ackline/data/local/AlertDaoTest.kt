@@ -3,6 +3,7 @@ package com.edu.ackline.data.local
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.edu.ackline.model.AckSyncState
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -96,11 +97,77 @@ class AlertDaoTest {
         assertEquals(listOf(viewed), awaitFirst(dao.observeViewed()))
     }
 
+    @Test
+    fun firstAcknowledgmentStoresPendingSyncStateAndMovesRowToViewed() {
+        val alert = alert(notificationId = "ack-first", createdAtEpochMillis = 1_000L)
+        val acknowledgedAt = 4_000L
+        execute { dao.insertIgnore(alert) }
+
+        assertEquals(
+            1,
+            execute { dao.acknowledge(alert.notificationId, acknowledgedAt) },
+        )
+
+        val stored = requireNotNull(execute { dao.findById(alert.notificationId) })
+        assertEquals(acknowledgedAt, stored.acknowledgedAtEpochMillis)
+        assertEquals(AckSyncState.PENDING.storageValue, stored.ackSyncState)
+        assertEquals(emptyList<AlertEntity>(), awaitFirst(dao.observePending()))
+        assertEquals(listOf(stored), awaitFirst(dao.observeViewed()))
+    }
+
+    @Test
+    fun repeatedAcknowledgmentDoesNotOverwriteOriginalTimestamp() {
+        val alert = alert(notificationId = "ack-repeat", createdAtEpochMillis = 1_000L)
+        execute {
+            dao.insertIgnore(alert)
+            dao.acknowledge(alert.notificationId, 4_000L)
+        }
+
+        assertEquals(
+            0,
+            execute { dao.acknowledge(alert.notificationId, 9_000L) },
+        )
+
+        val stored = requireNotNull(execute { dao.findById(alert.notificationId) })
+        assertEquals(4_000L, stored.acknowledgedAtEpochMillis)
+        assertEquals(AckSyncState.PENDING.storageValue, stored.ackSyncState)
+    }
+
+    @Test
+    fun acknowledgmentOfUnknownIdDoesNotCreateRow() {
+        assertEquals(0, execute { dao.acknowledge("unknown", 4_000L) })
+        assertEquals(null, execute { dao.findById("unknown") })
+    }
+
+    @Test
+    fun duplicateInsertAfterAcknowledgmentPreservesAcknowledgedRow() {
+        val alert = alert(notificationId = "ack-duplicate", createdAtEpochMillis = 1_000L)
+        execute {
+            dao.insertIgnore(alert)
+            dao.acknowledge(alert.notificationId, 4_000L)
+        }
+
+        assertEquals(
+            -1L,
+            execute { dao.insertIgnore(alert.copy(title = "duplicate payload")) },
+        )
+
+        val stored = requireNotNull(execute { dao.findById(alert.notificationId) })
+        assertEquals(alert.title, stored.title)
+        assertEquals(4_000L, stored.acknowledgedAtEpochMillis)
+        assertEquals(AckSyncState.PENDING.storageValue, stored.ackSyncState)
+    }
+
     private fun alert(
         notificationId: String,
         createdAtEpochMillis: Long,
         receivedAtEpochMillis: Long = createdAtEpochMillis,
         acknowledgedAtEpochMillis: Long? = null,
+        ackSyncState: String = if (acknowledgedAtEpochMillis == null) {
+            AckSyncState.NONE.storageValue
+        } else {
+            AckSyncState.PENDING.storageValue
+        },
     ) = AlertEntity(
         notificationId = notificationId,
         protocolVersion = 1,
@@ -110,6 +177,7 @@ class AlertDaoTest {
         createdAtEpochMillis = createdAtEpochMillis,
         receivedAtEpochMillis = receivedAtEpochMillis,
         acknowledgedAtEpochMillis = acknowledgedAtEpochMillis,
+        ackSyncState = ackSyncState,
     )
 
     private fun <T> execute(operation: () -> T): T =

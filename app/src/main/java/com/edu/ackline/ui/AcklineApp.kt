@@ -12,11 +12,10 @@ import androidx.compose.ui.Modifier
 import com.edu.ackline.feature.detail.AlertDetailScreen
 import com.edu.ackline.feature.inbox.InboxScreen
 import com.edu.ackline.feature.setup.SetupScreen
-import com.edu.ackline.model.Alert
 
 private sealed interface AppScreen {
     data object Inbox : AppScreen
-    data class Detail(val alert: Alert) : AppScreen
+    data class Detail(val notificationId: String) : AppScreen
     data object Setup : AppScreen
 }
 
@@ -31,12 +30,14 @@ fun AcklineApp() {
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val screen = currentScreen) {
             AppScreen.Inbox -> InboxScreen(
-                onAlertClick = { alert -> currentScreen = AppScreen.Detail(alert) },
+                onAlertClick = { notificationId ->
+                    currentScreen = AppScreen.Detail(notificationId)
+                },
                 onSetupClick = { currentScreen = AppScreen.Setup },
             )
 
             is AppScreen.Detail -> AlertDetailScreen(
-                alert = screen.alert,
+                notificationId = screen.notificationId,
                 onBack = { currentScreen = AppScreen.Inbox },
             )
 

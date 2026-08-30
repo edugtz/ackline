@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(platform(libs.kotlinx.serialization.bom))
     // Kept for the existing XML theme (Theme.MaterialComponents.*).
     implementation(libs.material)
     implementation(libs.androidx.appcompat)
@@ -69,4 +70,5 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.room.testing)
 }

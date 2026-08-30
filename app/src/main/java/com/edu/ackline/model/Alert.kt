@@ -22,4 +22,5 @@ data class Alert(
     val createdAt: Instant,
     val receivedAt: Instant,
     val acknowledgedAt: Instant?,
+    val ackSyncState: AckSyncState,
 )

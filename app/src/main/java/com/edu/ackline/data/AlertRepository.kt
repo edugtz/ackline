@@ -3,6 +3,7 @@ package com.edu.ackline.data
 import com.edu.ackline.data.local.AlertDao
 import com.edu.ackline.data.local.AlertEntity
 import com.edu.ackline.model.Alert
+import com.edu.ackline.model.AckSyncState
 import com.edu.ackline.model.AlertLevel
 import com.edu.ackline.push.IncomingAlertEnvelope
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +23,12 @@ class AlertRepository(
         val rowId = alertDao.insertIgnore(envelope.toEntity())
         return if (rowId == -1L) InsertResult.DUPLICATE else InsertResult.INSERTED
     }
+
+    fun acknowledge(notificationId: String, acknowledgedAt: Instant): Int =
+        alertDao.acknowledge(
+            notificationId = notificationId,
+            acknowledgedAtEpochMillis = acknowledgedAt.toEpochMilli(),
+        )
 
     fun observePending(): Flow<List<Alert>> =
         alertDao.observePending().map { alerts -> alerts.map(AlertEntity::toAlert) }
@@ -46,6 +53,7 @@ private fun IncomingAlertEnvelope.toEntity(): AlertEntity =
         createdAtEpochMillis = createdAt.toEpochMilli(),
         receivedAtEpochMillis = receivedAt.toEpochMilli(),
         acknowledgedAtEpochMillis = null,
+        ackSyncState = AckSyncState.NONE.storageValue,
     )
 
 private fun AlertEntity.toAlert(): Alert =
@@ -58,4 +66,5 @@ private fun AlertEntity.toAlert(): Alert =
         createdAt = Instant.ofEpochMilli(createdAtEpochMillis),
         receivedAt = Instant.ofEpochMilli(receivedAtEpochMillis),
         acknowledgedAt = acknowledgedAtEpochMillis?.let(Instant::ofEpochMilli),
+        ackSyncState = AckSyncState.fromStorageValue(ackSyncState),
     )

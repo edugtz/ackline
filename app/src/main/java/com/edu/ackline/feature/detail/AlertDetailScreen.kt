@@ -1,5 +1,6 @@
 package com.edu.ackline.feature.detail
 
+import android.app.Application
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +21,15 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.edu.ackline.model.Alert
 import com.edu.ackline.model.AlertLevel
 import java.time.Instant
@@ -34,9 +39,16 @@ import java.util.Locale
 
 @Composable
 fun AlertDetailScreen(
-    alert: Alert,
+    notificationId: String,
     onBack: () -> Unit,
 ) {
+    val application = LocalContext.current.applicationContext as Application
+    val viewModel: AlertDetailViewModel = viewModel(
+        key = "alert-detail-$notificationId",
+        factory = AlertDetailViewModelFactory(application, notificationId),
+    )
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -67,50 +79,72 @@ fun AlertDetailScreen(
                 .padding(horizontal = 24.dp, vertical = 22.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                SeverityMark(level = alert.level)
-                Text(
-                    text = severityLabel(alert.level),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = severityColor(alert.level),
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 1.sp,
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                Text(
-                    text = if (alert.acknowledgedAt == null) "Pendiente" else "Vista",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            when (val current = uiState) {
+                is DetailUiState.Loading -> {
+                    // Initial loading — do not show error message
+                }
+                is DetailUiState.NotFound -> {
+                    Text(
+                        text = "Esta alerta ya no está disponible.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                is DetailUiState.Found -> {
+                    val currentAlert = current.alert
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        SeverityMark(level = currentAlert.level)
+                        Text(
+                            text = severityLabel(currentAlert.level),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = severityColor(currentAlert.level),
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.sp,
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(
+                            text = if (currentAlert.acknowledgedAt == null) "Pendiente" else "Vista",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = currentAlert.title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = currentAlert.message,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    DetailTimestamp(label = "Creada", instant = currentAlert.createdAt)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    DetailTimestamp(label = "Recibida", instant = currentAlert.receivedAt)
+
+                    if (currentAlert.acknowledgedAt == null) {
+                        Spacer(modifier = Modifier.height(28.dp))
+                        TextButton(onClick = viewModel::acknowledge) {
+                            Text("Marcar como visto")
+                        }
+                    }
+                }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = alert.title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = alert.message,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            DetailTimestamp(label = "Creada", instant = alert.createdAt)
-            Spacer(modifier = Modifier.height(14.dp))
-            DetailTimestamp(label = "Recibida", instant = alert.receivedAt)
         }
     }
 }

@@ -13,4 +13,5 @@ data class AlertEntity(
     val createdAtEpochMillis: Long,
     val receivedAtEpochMillis: Long,
     val acknowledgedAtEpochMillis: Long?,
+    val ackSyncState: String,
 )

@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [AlertEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AcklineDatabase : RoomDatabase() {
@@ -18,6 +18,20 @@ abstract class AcklineDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "ALTER TABLE alerts ADD COLUMN ackSyncState TEXT NOT NULL DEFAULT 'none'",
+                )
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE alerts ADD COLUMN ackSyncedAtEpochMillis INTEGER",
+                )
+                db.execSQL(
+                    "ALTER TABLE alerts ADD COLUMN lastAckError TEXT",
+                )
+                db.execSQL(
+                    "ALTER TABLE alerts ADD COLUMN ackToken TEXT",
                 )
             }
         }

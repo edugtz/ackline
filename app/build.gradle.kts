@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -5,6 +7,22 @@ plugins {
     alias(libs.plugins.room)
     alias(libs.plugins.google.services)
 }
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.isFile) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
+fun String.toBuildConfigStringLiteral(): String =
+    "\"" +
+        replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\r", "\\r")
+            .replace("\n", "\\n") +
+        "\""
+
+val ackBaseUrl = localProperties.getProperty("ackline.ackBaseUrl").orEmpty()
 
 android {
     namespace = "com.edu.ackline"
@@ -20,6 +38,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "ACK_BASE_URL", ackBaseUrl.toBuildConfigStringLiteral())
     }
 
     buildTypes {
@@ -35,6 +54,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -58,6 +78,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.work.runtime)
     implementation(platform(libs.kotlinx.serialization.bom))
     // Kept for the existing XML theme (Theme.MaterialComponents.*).
     implementation(libs.material)

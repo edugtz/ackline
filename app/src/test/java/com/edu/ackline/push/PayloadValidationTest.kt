@@ -63,6 +63,27 @@ class PayloadValidationTest {
     }
 
     @Test
+    fun parsesOptionalAckTokenWithoutExposingItToAlertFields() {
+        val envelope = parseAcklinePayload(
+            validData("important") + ("ack_token" to "test-ack-token"),
+        )
+
+        assertEquals("test-ack-token", envelope?.ackToken)
+    }
+
+    @Test
+    fun acceptsMessagesWithoutAckTokenForBackwardCompatibility() {
+        assertNull(parseAcklinePayload(validData("important"))?.ackToken)
+    }
+
+    @Test
+    fun normalizesBlankAckTokenToAbsent() {
+        assertNull(
+            parseAcklinePayload(validData("important") + ("ack_token" to "  "))?.ackToken,
+        )
+    }
+
+    @Test
     fun mapsLevelsToStableNotificationChannelsAndImportance() {
         assertEquals(
             AcklineNotificationManager.REMEMBER_CHANNEL_ID,

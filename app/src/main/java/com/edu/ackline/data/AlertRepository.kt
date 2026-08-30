@@ -1,5 +1,7 @@
 package com.edu.ackline.data
 
+import com.edu.ackline.ack.AckSyncStore
+import com.edu.ackline.ack.PendingAcknowledgment
 import com.edu.ackline.data.local.AlertDao
 import com.edu.ackline.data.local.AlertEntity
 import com.edu.ackline.model.Alert
@@ -12,7 +14,7 @@ import java.time.Instant
 
 class AlertRepository(
     private val alertDao: AlertDao,
-) {
+) : AckSyncStore {
 
     enum class InsertResult {
         INSERTED,
@@ -41,6 +43,15 @@ class AlertRepository(
 
     fun findById(notificationId: String): Alert? =
         alertDao.findById(notificationId)?.toAlert()
+
+    override fun findPendingAcknowledgments(): List<PendingAcknowledgment> =
+        alertDao.findPendingAcknowledgments()
+
+    override fun markAckSynced(notificationId: String, syncedAtEpochMillis: Long): Int =
+        alertDao.markAckSynced(notificationId, syncedAtEpochMillis)
+
+    override fun markAckError(notificationId: String, errorCategory: String): Int =
+        alertDao.markAckError(notificationId, errorCategory)
 }
 
 private fun IncomingAlertEnvelope.toEntity(): AlertEntity =
@@ -54,6 +65,7 @@ private fun IncomingAlertEnvelope.toEntity(): AlertEntity =
         receivedAtEpochMillis = receivedAt.toEpochMilli(),
         acknowledgedAtEpochMillis = null,
         ackSyncState = AckSyncState.NONE.storageValue,
+        ackToken = ackToken,
     )
 
 private fun AlertEntity.toAlert(): Alert =

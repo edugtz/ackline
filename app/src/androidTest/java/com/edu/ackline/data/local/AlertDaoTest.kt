@@ -3,6 +3,7 @@ package com.edu.ackline.data.local
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.edu.ackline.ack.PendingAcknowledgment
 import com.edu.ackline.model.AckSyncState
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorService
@@ -158,6 +159,109 @@ class AlertDaoTest {
         assertEquals(AckSyncState.PENDING.storageValue, stored.ackSyncState)
     }
 
+    @Test
+    fun pendingAcknowledgmentProjectionOnlyIncludesAcknowledgedPendingRows() {
+        val pending = alert(
+            notificationId = "sync-pending",
+            createdAtEpochMillis = 1_000L,
+            acknowledgedAtEpochMillis = 4_000L,
+            ackToken = "test-token",
+        )
+        val none = alert(notificationId = "sync-none", createdAtEpochMillis = 2_000L)
+        val synced = alert(
+            notificationId = "sync-synced",
+            createdAtEpochMillis = 3_000L,
+            acknowledgedAtEpochMillis = 5_000L,
+            ackSyncState = AckSyncState.SYNCED.storageValue,
+            ackSyncedAtEpochMillis = 6_000L,
+        )
+        val error = alert(
+            notificationId = "sync-error",
+            createdAtEpochMillis = 4_000L,
+            acknowledgedAtEpochMillis = 6_000L,
+            ackSyncState = AckSyncState.ERROR.storageValue,
+            lastAckError = "http_403",
+        )
+
+        execute {
+            dao.insertIgnore(pending)
+            dao.insertIgnore(none)
+            dao.insertIgnore(synced)
+            dao.insertIgnore(error)
+        }
+
+        assertEquals(
+            listOf(PendingAcknowledgment("sync-pending", 4_000L, "test-token")),
+            execute { dao.findPendingAcknowledgments() },
+        )
+    }
+
+    @Test
+    fun markAckSyncedSetsSyncMetadataClearsErrorAndPreservesLocalAck() {
+        val alert = alert(
+            notificationId = "sync-success",
+            createdAtEpochMillis = 1_000L,
+            acknowledgedAtEpochMillis = 4_000L,
+            lastAckError = "http_403",
+            ackToken = "test-token",
+        )
+        execute { dao.insertIgnore(alert) }
+
+        assertEquals(
+            1,
+            execute { dao.markAckSynced(alert.notificationId, 7_000L) },
+        )
+
+        val stored = requireNotNull(execute { dao.findById(alert.notificationId) })
+        assertEquals(4_000L, stored.acknowledgedAtEpochMillis)
+        assertEquals(AckSyncState.SYNCED.storageValue, stored.ackSyncState)
+        assertEquals(7_000L, stored.ackSyncedAtEpochMillis)
+        assertEquals(null, stored.lastAckError)
+        assertEquals(alert.ackToken, stored.ackToken)
+    }
+
+    @Test
+    fun markAckErrorSetsTerminalMetadataAndDoesNotModifyNonPendingRows() {
+        val pending = alert(
+            notificationId = "sync-error-pending",
+            createdAtEpochMillis = 1_000L,
+            acknowledgedAtEpochMillis = 4_000L,
+            ackToken = "test-token",
+        )
+        val synced = alert(
+            notificationId = "sync-error-synced",
+            createdAtEpochMillis = 2_000L,
+            acknowledgedAtEpochMillis = 5_000L,
+            ackSyncState = AckSyncState.SYNCED.storageValue,
+            ackSyncedAtEpochMillis = 6_000L,
+        )
+        execute {
+            dao.insertIgnore(pending)
+            dao.insertIgnore(synced)
+        }
+
+        assertEquals(
+            1,
+            execute {
+                dao.markAckError(pending.notificationId, "http_404")
+            },
+        )
+        assertEquals(
+            0,
+            execute {
+                dao.markAckError(synced.notificationId, "http_403")
+            },
+        )
+
+        val storedPending = requireNotNull(execute { dao.findById(pending.notificationId) })
+        assertEquals(4_000L, storedPending.acknowledgedAtEpochMillis)
+        assertEquals(AckSyncState.ERROR.storageValue, storedPending.ackSyncState)
+        assertEquals("http_404", storedPending.lastAckError)
+
+        val storedSynced = requireNotNull(execute { dao.findById(synced.notificationId) })
+        assertEquals(synced, storedSynced)
+    }
+
     private fun alert(
         notificationId: String,
         createdAtEpochMillis: Long,
@@ -168,6 +272,9 @@ class AlertDaoTest {
         } else {
             AckSyncState.PENDING.storageValue
         },
+        ackSyncedAtEpochMillis: Long? = null,
+        lastAckError: String? = null,
+        ackToken: String? = null,
     ) = AlertEntity(
         notificationId = notificationId,
         protocolVersion = 1,
@@ -178,6 +285,9 @@ class AlertDaoTest {
         receivedAtEpochMillis = receivedAtEpochMillis,
         acknowledgedAtEpochMillis = acknowledgedAtEpochMillis,
         ackSyncState = ackSyncState,
+        ackSyncedAtEpochMillis = ackSyncedAtEpochMillis,
+        lastAckError = lastAckError,
+        ackToken = ackToken,
     )
 
     private fun <T> execute(operation: () -> T): T =

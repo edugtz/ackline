@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
+import os
 from datetime import datetime, timezone
-
-import firebase_admin
-from firebase_admin import messaging
-
 
 FCM_PRIORITY_BY_LEVEL = {
     "remember": "normal",
@@ -14,7 +11,27 @@ FCM_PRIORITY_BY_LEVEL = {
 }
 
 
+def build_data(notification_id, level, title, message, created_at):
+    data = {
+        "protocol": "1",
+        "notification_id": notification_id,
+        "level": level,
+        "title": title,
+        "message": message,
+        "created_at": created_at,
+    }
+
+    ack_token = os.environ.get("ACKLINE_ACK_TOKEN")
+    if ack_token:
+        data["ack_token"] = ack_token
+
+    return data
+
+
 def main():
+    import firebase_admin
+    from firebase_admin import messaging
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--fid", required=True)
     parser.add_argument("--id", default="phase2-test-001")
@@ -31,14 +48,13 @@ def main():
     message = messaging.Message(
         fid=args.fid,
         android=messaging.AndroidConfig(priority=priority),
-        data={
-            "protocol": "1",
-            "notification_id": args.id,
-            "level": args.level,
-            "title": args.title,
-            "message": args.message,
-            "created_at": created_at,
-        },
+        data=build_data(
+            notification_id=args.id,
+            level=args.level,
+            title=args.title,
+            message=args.message,
+            created_at=created_at,
+        ),
     )
 
     response = messaging.send(message)

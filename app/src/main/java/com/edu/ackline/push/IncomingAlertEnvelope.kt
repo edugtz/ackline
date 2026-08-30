@@ -11,6 +11,7 @@ data class IncomingAlertEnvelope(
     val message: String,
     val createdAt: Instant,
     val receivedAt: Instant,
+    val ackToken: String? = null,
 )
 
 internal fun parseAcklinePayload(data: Map<String, String>): IncomingAlertEnvelope? {
@@ -28,6 +29,7 @@ internal fun parseAcklinePayload(data: Map<String, String>): IncomingAlertEnvelo
 
     val level = AlertLevel.fromWireValue(levelValue) ?: return null
     val createdAt = runCatching { Instant.parse(createdAtValue) }.getOrNull() ?: return null
+    val ackToken = data["ack_token"]?.takeIf { it.isNotBlank() }
 
     return IncomingAlertEnvelope(
         protocolVersion = PROTOCOL_VERSION.toInt(),
@@ -37,6 +39,7 @@ internal fun parseAcklinePayload(data: Map<String, String>): IncomingAlertEnvelo
         message = message,
         createdAt = createdAt,
         receivedAt = Instant.now(),
+        ackToken = ackToken,
     )
 }
 

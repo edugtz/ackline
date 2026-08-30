@@ -4,44 +4,39 @@
 
 Use simple, maintainable architecture.
 
-Avoid overengineering.
-
-Ackline should remain understandable by one developer years later.
-
 Reliability, explicit state transitions, privacy, and low maintenance matter more than framework sophistication.
+
+Ackline remains a single-user, single-app-module Android client for Hermes-selected alerts.
+
+Do not move Hermes Personal Admin responsibilities into Android.
 
 ---
 
 ## 2. Source-of-Truth Rules
 
 1. `docs/CURRENT_PHASE.md` is the active implementation scope.
-2. Actual Kotlin/Python source is authoritative for exact paths, fields, APIs, and runtime behavior.
-3. If docs conflict with code, stop and report before editing.
-4. Hermes SQLite/outbox is authoritative for server-side notification state.
-5. Room is authoritative for device Inbox and local acknowledgment state.
-6. FCM is transport only.
-7. Android notification tray state is never source of truth.
-8. Setup/debug state is not Inbox/ACK state.
-9. Only explicit acknowledgment actions may modify local acknowledgment state.
-10. Do not add future-phase fields/services unless the active phase requires them.
+2. Actual source is authoritative for exact runtime behavior.
+3. Hermes notification SQLite/state layer is authoritative for server notification state.
+4. Room is authoritative for device Inbox, local acknowledgment, and local ACK-sync state.
+5. FCM is inbound transport only.
+6. Android tray is presentation only.
+7. WorkManager is deferred execution, not authoritative state.
+8. Tailscale is the private ACK/recovery network path; FCM push must not depend on it.
+9. Only explicit `Visto` actions create local acknowledgment.
+10. Remote ACK failure never reverses local `Vista`.
 
 ---
 
-## 3. High-Level Runtime Architecture
+## 3. Current High-Level Runtime
 
-Target MVP:
+After Phase 4:
 
 ```text
-Hermes Personal Admin
+Hermes selected notification
         │
+        │ later Phase 6 outbound integration
         ▼
-persistent SQLite notification outbox
-        │
-        ▼
-FCM sender boundary
-        │
-        ▼
-FCM
+       FCM
         │
         ▼
 FirebaseMessagingService
@@ -53,119 +48,58 @@ IncomingAlertEnvelope
 AlertRepository
         │
         ▼
-Room
-   ┌────┴─────────────────────┐
-   │                          │
-   ▼                          ▼
-Compose Inbox/Detail     Android notification
-   │                          │
-   │ explicit Visto           │ explicit Visto
-   └─────────────┬────────────┘
-                 ▼
-      LocalAcknowledgmentManager
-                 │
-         atomic Room ACK
-                 │
-          cancel tray item
-                 │
-                 ▼
-       ackSyncState = PENDING
-                 │
-       Phase 4 WorkManager sync
-                 │
-                 ▼
-          Hermes ACK endpoint
-                 │
-                 ▼
-          Hermes SQLite ACK
+       Room
+   ┌────┴──────────────────┐
+   │                       │
+   ▼                       ▼
+Inbox / Detail      native notification
+   │                       │
+   │ explicit Visto        │ explicit Visto
+   └───────────┬───────────┘
+               ▼
+ LocalAcknowledgmentManager
+               │
+       atomic local Room ACK
+               │
+      ackSyncState=PENDING
+               │
+       cancel tray item
+               │
+       enqueue unique work
+               ▼
+        AckSyncWorker
+               │
+        AckSyncRunner
+               │
+        AckRemoteClient
+               │
+        HTTPS / Tailscale
+               ▼
+       Mac ACK endpoint
+               │
+ existing Hermes notification-state layer
+               │
+               ▼
+         Hermes SQLite
+               │
+         success response
+               ▼
+ Room ackSyncState=SYNCED
 ```
 
-Phase 3 stops at durable local `PENDING`.
-
-No remote ACK is performed yet.
-
 ---
 
-## 4. Android Architecture
+## 4. Proven Inbound Boundary
 
-Single Android module:
+FCM data messages remain the inbound transport.
 
-`:app`
+Firebase types stop at:
 
-Primary UI data flow:
+`AcklineMessagingService`
 
-Compose  
-→ ViewModel  
-→ app-owned repository/manager  
-→ Room.
+Below that boundary the app uses app-owned models.
 
-Push receive flow:
-
-`FirebaseMessagingService`  
-→ protocol parse  
-→ `IncomingAlertEnvelope`  
-→ `AlertRepository`  
-→ Room  
-→ native notification only for new insert.
-
-Local acknowledgment flow:
-
-Inbox / Detail / notification action  
-→ one `LocalAcknowledgmentManager`  
-→ `AlertRepository` atomic ACK  
-→ Room  
-→ cancel matching tray notification.
-
-Manual dependency wiring remains preferred over DI frameworks.
-
----
-
-## 5. Transport Isolation
-
-Firebase-specific types stop at the push boundary.
-
-Boundary:
-
-`FirebaseMessagingService`  
-→ Firebase map extraction  
-→ protocol validation  
-→ `IncomingAlertEnvelope`  
-→ normal application code.
-
-Nothing below the push boundary depends on `RemoteMessage`.
-
-FCM must remain replaceable without rewriting:
-
-- Room;
-- Inbox;
-- acknowledgment semantics;
-- ACK retry state;
-- E2EE plaintext model.
-
----
-
-## 6. FCM Registration
-
-Continue current Firebase Installation ID registration.
-
-Development pairing remains:
-
-Android current FID  
-→ Setup copy action  
-→ protected local Mac configuration  
-→ Firebase sender targets FID.
-
-No registration backend is required for MVP.
-
-Treat FID as sensitive operational data.
-
----
-
-## 7. FCM Message Type
-
-Use FCM data messages.
-
-Current plaintext development protocol:
+Current plaintext development protocol remains v1 until E2EE:
 
 ```json
 {
@@ -174,200 +108,126 @@ Current plaintext development protocol:
   "level": "important",
   "title": "Test alert",
   "message": "Non-sensitive development payload",
-  "created_at": "2026-08-29T20:00:00Z"
+  "created_at": "2026-08-30T18:00:00Z"
 }
 ```
 
-Local ACK fields never come from FCM.
-
-The device owns:
-
-- `receivedAt`;
-- `acknowledgedAt`;
-- `ackSyncState`.
+Phase 4 does not change this inbound protocol.
 
 ---
 
-## 8. App-Owned Models
+## 5. Local Alert Model
 
-Core app concepts:
+Current core alert data:
 
-- `IncomingAlertEnvelope`
-- `Alert`
-- `AlertLevel`
-- `AckSyncState`
-
-`AlertLevel`:
-
-- REMEMBER
-- IMPORTANT
-- URGENT
-
-Phase 3 `AckSyncState`:
-
-- NONE
-- PENDING
-
-Future remote-sync phase may extend ACK state as required.
-
-Do not expose raw wire/storage strings throughout UI.
-
----
-
-## 9. Local Database Evolution
-
-### Version 1
-
-Phase 2 schema:
-
-- `notificationId`
-- `protocolVersion`
-- `level`
-- `title`
-- `message`
-- `createdAtEpochMillis`
-- `receivedAtEpochMillis`
-- `acknowledgedAtEpochMillis`
-
-### Version 2
-
-Phase 3 adds:
-
-- `ackSyncState`
-
-Migration:
-
-```sql
-ALTER TABLE alerts
-ADD COLUMN ackSyncState TEXT NOT NULL DEFAULT 'none'
+```text
+notificationId
+protocolVersion
+level
+title
+message
+createdAt
+receivedAt
+acknowledgedAt
+ackSyncState
+ackSyncedAt
+lastAckError
+ackToken (storage-only; not part of Alert/UI)
 ```
 
-No destructive migration.
+Phase 4 adds the two sync metadata fields plus the storage-only ACK token.
 
-Keep exported schemas for each version.
+User-visible read state still comes from:
 
-Future schema versions require explicit migration review.
+```text
+acknowledgedAt == null     → Pendiente
+acknowledgedAt != null     → Vista
+```
 
----
-
-## 10. Local Alert Semantics
-
-Pending:
-
-`acknowledgedAt == null`
-
-Viewed:
-
-`acknowledgedAt != null`
-
-Newly received:
-
-- `acknowledgedAt = null`
-- `ackSyncState = NONE`
-
-Newly locally acknowledged:
-
-- `acknowledgedAt = now`
-- `ackSyncState = PENDING`
-
-Local ACK remains valid even when remote ACK does not yet exist.
+Remote state must never redefine whether the alert is locally viewed.
 
 ---
 
-## 11. Receive Idempotency
+## 6. ACK Sync State
 
-`notificationId` is the business/local idempotency key.
+Phase 4:
 
-Receive:
+```text
+NONE
+PENDING
+SYNCED
+ERROR
+```
 
-FCM  
-→ validate  
-→ Room INSERT IGNORE by primary key  
-→ new row = notify  
-→ existing row = no repost.
+State machine:
 
-A duplicate message must never overwrite local acknowledgment metadata.
+```text
+new alert
+  ↓
+NONE
 
-Therefore a duplicate received after an alert is Vista must remain Vista.
+explicit local Visto
+  ↓
+PENDING
 
----
+remote idempotent success
+  ↓
+SYNCED
+```
 
-## 12. Persist Before Presentation
+Permanent remote failure:
 
-For a new valid alert:
+```text
+PENDING
+  ↓
+ERROR
+```
 
-Room persist  
-→ then tray notification.
+Transient failure:
 
-If notification permission is unavailable, Room still contains the alert.
+```text
+PENDING
+  ↓
+PENDING
+```
 
-If Room persistence fails, do not create a tray-only authoritative state.
-
----
-
-## 13. Notification Channels
-
-Stable channels remain:
-
-| Level | Channel ID | Channel name | Importance |
-|---|---|---|---|
-| REMEMBER | `ackline_remember` | `Ackline · Remember` | LOW |
-| IMPORTANT | `ackline_important` | `Ackline · Important` | DEFAULT |
-| URGENT | `ackline_urgent` | `Ackline · Urgent` | HIGH |
-
-Do not rename channel IDs casually because Android persists channels.
-
-FCM priorities remain:
-
-- remember → normal
-- important → high
-- urgent → high
+No remote outcome returns the alert to `Pendiente`.
 
 ---
 
-## 14. Notification Identity
+## 7. Room Database Evolution
 
-Current native notification identity:
+### v1 — Phase 2
 
-`notificationId.hashCode()`
+Alert persistence.
 
-Use the same identity for:
+### v2 — Phase 3
 
-- posting;
-- canceling the matching notification.
+Adds:
 
-Do not call `cancelAll()` for one acknowledged alert.
+```text
+ackSyncState TEXT NOT NULL DEFAULT 'none'
+```
 
----
+### v3 — Phase 4
 
-## 15. Explicit ACK Semantics
+Adds nullable:
 
-Only explicit actions acknowledge:
+```text
+ackSyncedAtEpochMillis INTEGER
+lastAckError TEXT
+ackToken TEXT
+```
 
-- notification action `Visto`;
-- Inbox `Visto`;
-- Detail `Marcar como visto`.
+Migration must be non-destructive.
 
-These never acknowledge:
-
-- FCM delivery;
-- tray display;
-- body tap;
-- tray dismissal;
-- app launch;
-- Detail open;
-- tab selection;
-- restart/reboot.
-
-There is no inferred read state.
+Keep all schema exports.
 
 ---
 
-## 16. Atomic Acknowledgment Transaction
+## 8. Local ACK Transaction
 
-The database owns the state transition.
-
-Preferred SQL:
+Phase 3 transaction remains authoritative:
 
 ```sql
 UPDATE alerts
@@ -377,439 +237,570 @@ WHERE notificationId = :notificationId
   AND acknowledgedAtEpochMillis IS NULL
 ```
 
-This makes the first acknowledgment win.
+First local ACK wins.
 
-A later duplicate acknowledgment updates zero rows and cannot replace the original timestamp.
+Remote synchronization must never rewrite `acknowledgedAtEpochMillis`.
 
 ---
 
-## 17. Shared LocalAcknowledgmentManager
-
-Phase 3 introduces one concrete cross-layer operation.
+## 9. LocalAcknowledgmentManager
 
 Responsibilities:
 
-1. perform local atomic ACK through repository;
-2. treat repeated ACK idempotently;
-3. cancel the matching Android notification;
-4. return a small result where useful.
+1. perform atomic local ACK;
+2. preserve local idempotency;
+3. cancel matching tray notification;
+4. request remote ACK scheduling after local persistence.
 
-This manager does **not**:
+It does not:
 
 - perform HTTP;
-- schedule retries;
-- know Hermes networking;
-- use Tailscale;
+- block on Tailscale;
+- wait for Hermes;
+- implement retry loops;
 - perform encryption.
 
-It is not a generic Clean Architecture use-case layer.
+If scheduling fails, local ACK remains durable.
 
 ---
 
-## 18. Inbox ACK Flow
+## 10. WorkManager Boundary
 
-Pending Inbox row:
+Use WorkManager for durable deferred ACK execution.
 
-`Visto` action  
-→ ViewModel background call  
-→ `LocalAcknowledgmentManager`  
-→ atomic Room update  
-→ Room Flow changes  
-→ row leaves Pendientes  
-→ row appears in Vistas  
-→ tray item canceled.
+Planning baseline:
 
-The row body remains navigation-only.
+`androidx.work:work-runtime:2.11.2`
 
----
-
-## 19. Detail ACK Flow
-
-Detail must observe live Room data in Phase 3.
-
-Navigation identifies Detail by `notificationId`.
-
-`AlertDetailViewModel` observes the repository.
-
-Pending Detail:
-
-`Marcar como visto`  
-→ shared manager  
-→ Room update  
-→ Flow emits Vista  
-→ button disappears.
-
-Opening Detail alone is read-only.
-
----
-
-## 20. Notification Action Flow
-
-Native notification action:
-
-`Visto`
-
-uses an immutable broadcast PendingIntent targeting private:
-
-`AcknowledgeReceiver`.
-
-Receiver flow:
-
-`onReceive()`  
-→ validate action/ID  
-→ `goAsync()`  
-→ bounded background executor  
-→ shared local manager  
-→ `finish()` in finally.
-
-The receiver does not start network work or an Activity.
-
----
-
-## 21. BroadcastReceiver Lifecycle Rule
-
-Manifest BroadcastReceiver `onReceive()` runs on the main thread.
-
-Disk IO must not block that thread.
-
-For the local Room update:
-
-- use `goAsync()`;
-- hand work to a bounded background execution path;
-- always call `PendingResult.finish()`.
-
-Work must remain short.
-
-Long remote work belongs to later WorkManager phase, not this receiver.
-
----
-
-## 22. PendingIntent Identity Rule
-
-Notification actions require one PendingIntent per business notification.
-
-Do not rely only on extras for uniqueness.
-
-Use a unique identity based on the `notificationId`, such as:
-
-- stable requestCode plus
-- an encoded unique `Intent.data` URI.
-
-Use immutable flags.
-
-Receiver must still validate the supplied business ID.
-
----
-
-## 23. ACK Sync State Boundary
-
-Phase 3 creates durable:
-
-`PENDING`
-
-but does not consume it.
-
-Phase 4 will own:
-
-- HTTP ACK contract;
-- WorkManager;
-- retry/backoff;
-- remote success/failure;
-- eventual SYNCED/ERROR state;
-- optional sync timestamps/errors.
-
-Do not implement those early.
-
----
-
-## 24. Application Wiring
-
-`AcklineApplication` owns:
-
-- one `AcklineDatabase`;
-- one `AlertRepository`;
-- one `LocalAcknowledgmentManager`;
-- optionally one small ACK receiver executor.
-
-FCM service and UI share the same data layer.
-
-No Hilt/Koin required.
-
----
-
-## 25. UI Architecture
-
-Screens:
-
-- Inbox;
-- Alert Detail;
-- Setup.
-
-Phase 3 remains a small manually navigated app.
-
-No Navigation Compose is required.
-
-Inbox uses `InboxViewModel`.
-
-Detail now justifiably uses `AlertDetailViewModel` because acknowledgment changes Room state while Detail is visible.
-
----
-
-## 26. Inbox Product Direction
-
-Preserve the accepted Phase 2 visual system:
-
-- flat rows;
-- restrained severity;
-- strong typography;
-- Pendientes/Vistas;
-- compact density;
-- no card soup.
-
-Phase 3 adds a compact explicit `Visto` action.
-
-The action must be clear but not visually dominate every alert.
-
-Viewed rows no longer expose acknowledgment action.
-
----
-
-## 27. Detail Product Direction
-
-Preserve the lightweight Detail hierarchy.
-
-Pending:
-
-- severity;
-- title;
-- message;
-- timestamps;
-- Pendiente;
-- `Marcar como visto`.
-
-Viewed:
-
-- same information;
-- Vista;
-- no ACK button.
-
-Do not add remote-sync diagnostics by default.
-
----
-
-## 28. Migration Testing
-
-Because Phase 2 data already exists on the real device, schema migration is product behavior.
-
-Keep:
-
-- schema v1;
-- schema v2.
-
-Use Room migration-test tooling where practical.
-
-Physical upgrade over the existing installation is also mandatory.
-
-Do not validate migration by clearing data.
-
----
-
-## 29. ACK Testing Invariants
-
-False ACK:
-
-- receive;
-- display;
-- tap/open;
-- swipe;
-- app launch;
-- Detail open;
-- restart.
-
-True ACK:
-
-- notification Visto;
-- Inbox Visto;
-- Detail Marcar como visto.
-
-Idempotency:
-
-- repeated ACK preserves first timestamp;
-- duplicate FCM after ACK preserves Vista.
-
-Persistence:
-
-- local ACK survives process death/reboot.
-
----
-
-## 30. Remote ACK Architecture
-
-Introduced in Phase 4.
-
-Target later flow:
-
-Room `ackSyncState=PENDING`  
-→ WorkManager drain  
-→ HTTPS/Tailscale  
-→ Hermes ACK endpoint  
-→ Hermes SQLite  
-→ local SYNCED.
-
-Remote availability must never undo local Vista state.
-
----
-
-## 31. E2EE Boundary
-
-Production personal content still requires application-level E2EE before real use.
-
-Target later:
-
-Hermes plaintext  
-→ AES-256-GCM  
-→ FCM ciphertext  
-→ Android authenticated decrypt  
-→ Room readable local alert.
-
-Until that phase passes:
-
-fake/non-sensitive content only.
-
----
-
-## 32. Backup / Privacy
-
-Keep:
-
-`android:allowBackup="false"`
-
-Secrets remain outside the repository.
-
-Do not log:
-
-- private Firebase service-account material;
-- encryption keys;
-- future ACK credentials;
-- FID;
-- real private alert content.
-
----
-
-## 33. Dependency Policy
-
-Current core dependencies:
-
-- Compose / Material 3
-- Firebase Messaging
-- Room 2.8.4
-- KSP 2.3.10
-- Lifecycle 2.11.0
-
-Phase 3 may add Room testing only for migration coverage.
-
-Do not add:
-
-- WorkManager yet;
-- Retrofit;
-- Hilt;
-- Koin;
-- Navigation Compose;
-- generic sync frameworks;
-- socket libraries.
-
----
-
-## 34. Planned Project Shape
-
-Conceptual shape after Phase 3:
+One unique one-time drain:
 
 ```text
-app/
-  src/main/java/com/edu/ackline/
-    AcklineApplication.kt
-    MainActivity.kt
-
-    model/
-      Alert.kt
-      AckSyncState.kt
-
-    push/
-      AcklineMessagingService.kt
-      IncomingAlertEnvelope.kt
-
-    data/
-      AlertRepository.kt
-      local/
-        AlertEntity.kt
-        AlertDao.kt
-        AcklineDatabase.kt
-
-    ack/
-      LocalAcknowledgmentManager.kt
-      AcknowledgeReceiver.kt
-
-    notifications/
-      AcklineNotificationManager.kt
-
-    feature/
-      inbox/
-        InboxScreen.kt
-        InboxViewModel.kt
-      detail/
-        AlertDetailScreen.kt
-        AlertDetailViewModel.kt
-      setup/
-        SetupScreen.kt
-
-    ui/
-      AcklineApp.kt
+unique name: ackline-ack-sync
+policy: APPEND_OR_REPLACE
+constraint: CONNECTED
+backoff: EXPONENTIAL
 ```
 
-Later phases add remote ACK/security/recovery files only when active.
+The actual policy is `ExistingWorkPolicy.APPEND_OR_REPLACE`. `KEEP` can
+strand a new PENDING ACK when a running worker has already read its backlog;
+the append policy leaves a successor in the unique chain.
+
+No periodic worker.
+
+No worker-per-alert permanent queue.
+
+Room backlog is the durable queue.
 
 ---
 
-## 35. Long-Term Replaceability
+## 11. Scheduling Recovery
 
-Changing FCM transport should not require rewriting:
+Room and WorkManager use separate durable stores, so local ACK + enqueue cannot be one atomic transaction.
 
-- Room;
-- local acknowledgment;
-- Inbox/Detail;
-- remote ACK state machine;
-- E2EE plaintext semantics.
+Recovery invariant:
 
-Local ACK remains an app-owned state transition independent of transport provider.
+```text
+Ackline process start
+→ enqueue same unique drain
+```
 
----
+If no PENDING rows exist, worker exits.
 
-## 36. Reliability Rule
-
-Changes to notification actions must not regress Phase 1/2 behavior.
-
-Do not introduce:
-
-- foreground service;
-- custom reconnect loop;
-- persistent socket;
-- battery exemption;
-- ColorOS hacks.
-
-Standard FCM remains the push path unless evidence proves otherwise.
+This prevents a process death between local persistence and enqueue from permanently stranding an ACK.
 
 ---
 
-## 37. Phase Discipline
+## 12. ACK Sync Runner
 
-Architecture describes the intended product.
+Use a narrow ACK-specific orchestration object if helpful for deterministic testing.
 
-`CURRENT_PHASE.md` defines what may be implemented now.
+Conceptual responsibilities:
 
-Phase 3 ends at:
+```text
+load Room PENDING ACKs
+→ remote acknowledge each
+→ mark SYNCED / ERROR / retryable
+→ return whether WorkManager must retry
+```
 
-durable local acknowledgment + `ackSyncState=PENDING`.
+Do not generalize it into a whole application sync engine.
 
-It does not include remote synchronization.
+Reconciliation remains Phase 7.
 
-Every phase remains bounded, validated, physically QA'd where appropriate, independently reviewed, and merged only after final PASS.
+---
+
+## 13. Remote ACK Client
+
+App-owned boundary:
+
+```text
+AckRemoteClient
+```
+
+Input:
+
+```text
+notificationId
+ackToken
+```
+
+Output categories:
+
+```text
+SUCCESS
+TRANSIENT_FAILURE
+PERMANENT_FAILURE
+```
+
+No alert title/message crosses this boundary.
+
+HTTP implementation details stay below it.
+
+---
+
+## 14. Remote ACK Protocol
+
+Actual Hermes endpoint:
+
+```text
+POST /ack/<notification_id>
+X-Ack-Token: <per-notification token>
+```
+
+The request has no body. The notification ID is encoded as one URL path
+segment. `Tailscale-User-Login` is required by the server path but is injected
+by Tailscale Serve; Android must not set or spoof it.
+
+Actual idempotent success:
+
+`200 OK`
+
+Repeated request for an already-acknowledged notification is still success.
+
+Unknown ID does not create state.
+
+---
+
+## 15. Failure Classification
+
+### Transient
+
+Examples:
+
+```text
+connection failure
+DNS/TLS/timeout
+408
+429
+5xx
+```
+
+Local:
+
+```text
+Vista
+ackSyncState=PENDING
+```
+
+Worker:
+
+`retry`
+
+### Permanent
+
+Examples:
+
+```text
+400
+403
+404
+unsupported protocol/client error
+```
+
+Local:
+
+```text
+Vista
+ackSyncState=ERROR
+lastAckError=sanitized category
+```
+
+Worker must not tight-loop.
+
+---
+
+## 16. Private Network Architecture
+
+Preferred:
+
+```text
+Android
+  ↓ HTTPS
+private *.ts.net route
+  ↓
+Tailscale Serve
+  ↓
+127.0.0.1:<local ACK port>
+  ↓
+Mac ACK endpoint
+```
+
+Do not use Tailscale Funnel.
+
+Do not expose the ACK endpoint publicly.
+
+Do not bind the Python ACK service to all interfaces unless explicitly justified.
+
+---
+
+## 17. Tailscale Independence
+
+Inbound:
+
+```text
+Hermes → FCM → Android
+```
+
+must work without Tailscale on the phone.
+
+Outbound ACK:
+
+```text
+Android → Tailscale → Mac
+```
+
+may fail temporarily.
+
+That failure is represented by durable local sync state and WorkManager retry.
+
+This asymmetry is intentional.
+
+---
+
+## 18. Hermes Server Boundary
+
+The ACK endpoint must call the existing Hermes notification-state abstraction.
+
+Preferred:
+
+```text
+HTTP handler
+→ notification_state acknowledgement function
+→ SQLite transaction
+```
+
+Avoid duplicating raw SQL in the HTTP handler.
+
+Do not create a separate Ackline server database if Hermes already has the authoritative notification row.
+
+Do not touch Gmail/Calendar/Tasks/LLM logic.
+
+---
+
+## 19. Server Idempotency
+
+Hermes ACK by `notification_id`.
+
+First valid ACK:
+
+- find existing notification;
+- persist ACK;
+- preserve intended timestamp semantics;
+- success.
+
+Repeat:
+
+- no duplicate;
+- no destructive rewrite;
+- same success class.
+
+Unknown:
+
+- no phantom creation;
+- permanent client error.
+
+---
+
+## 20. Server Exposure
+
+For Phase 4 QA, manually launching the small ACK endpoint is sufficient.
+
+Daemonization/launchd is not automatically part of Phase 4.
+
+If Hermes already has a standard service lifecycle, reuse may be proposed during preflight.
+
+Do not expand scope into generic server operations.
+
+---
+
+## 21. Android Networking
+
+One endpoint does not justify a large API framework.
+
+Default preference:
+
+- `HttpsURLConnection` with explicit timeouts and cleanup.
+
+A focused HTTP library is acceptable only if preflight demonstrates a concrete correctness or testing advantage.
+
+No Retrofit by default.
+
+No cleartext-network exception if private HTTPS works.
+
+---
+
+## 22. Endpoint Configuration
+
+Do not commit user-specific private network configuration unnecessarily.
+
+Preferred local build configuration:
+
+```text
+local.properties
+→ Gradle
+→ app-readable ACK base URL
+```
+
+No public configuration service.
+
+No Firebase Remote Config.
+
+No credentials in source.
+
+---
+
+## 23. Authentication
+
+Tailscale-only private access may be sufficient for the initial single-user deployment.
+
+Do not invent a bearer-token system without a requirement.
+
+If the actual Hermes endpoint already requires app-layer auth, preflight must define secure provisioning and storage before implementation.
+
+No secret logging.
+
+---
+
+## 24. UI Architecture
+
+Accepted screens remain:
+
+- Inbox;
+- Detail;
+- Setup.
+
+Phase 4 should not redesign them.
+
+Local product state remains:
+
+- Pendiente;
+- Vista.
+
+Transport sync state stays internal by default.
+
+A permanent-sync-error affordance requires explicit product justification.
+
+---
+
+## 25. Notification Receiver
+
+`AcknowledgeReceiver` remains:
+
+```text
+onReceive
+→ validate
+→ goAsync
+→ bounded background local ACK
+→ finish
+```
+
+HTTP never runs in the BroadcastReceiver.
+
+The manager may schedule WorkManager after local persistence.
+
+---
+
+## 26. Worker Lifecycle
+
+Worker class name becomes persistent WorkManager data.
+
+Choose a stable clear name such as:
+
+`AckSyncWorker`
+
+Do not casually rename/remove it in later releases while pending work may exist.
+
+Worker stays bounded well below WorkManager execution limits.
+
+---
+
+## 27. Data Minimization
+
+ACK sync requires only:
+
+```text
+notificationId
+ackToken
+```
+
+Room also keeps `acknowledgedAt` in the pending projection so remote sync never
+loses the original local decision. The current Hermes endpoint does not
+receive that timestamp; it receives only the ID and token.
+
+The worker and remote client should not load/send:
+
+```text
+title
+message
+level
+receivedAt
+```
+
+unless a future protocol requirement explicitly justifies it.
+
+This reduces privacy risk.
+
+---
+
+## 28. Logging
+
+Allowed diagnostic categories:
+
+```text
+ACK sync started
+ACK sync success
+ACK sync transient failure
+ACK sync permanent failure
+pending ACK count
+```
+
+Avoid:
+
+- alert text;
+- FID;
+- tokens;
+- full request bodies;
+- raw response bodies;
+- service-account material;
+- encryption keys;
+- unbounded notification IDs.
+
+---
+
+## 29. E2EE Boundary
+
+Phase 4 still uses fake/non-sensitive inbound payloads.
+
+Phase 5 will add application-level E2EE for alert content.
+
+ACK protocol itself remains metadata-only. Phase 5 must protect the eventual
+production inner payload, including ACK credential material, before sensitive
+traffic is enabled.
+
+---
+
+## 30. Future Boundaries
+
+### Phase 5
+
+Application-level E2EE.
+
+### Phase 6
+
+Real Hermes outbound FCM sender/outbox integration.
+
+### Phase 7
+
+Recovery/reconciliation for missed pending alerts.
+
+Do not pull those responsibilities into Phase 4.
+
+---
+
+## 31. Dependency Policy
+
+Expected:
+
+```text
+Room 2.8.4
+Lifecycle 2.11.0
+Firebase Messaging existing
+Compose existing
+WorkManager 2.11.2
+```
+
+Possible test-only:
+
+```text
+room-testing existing
+work-testing if justified
+```
+
+Avoid new DI/navigation/network frameworks without a concrete need.
+
+---
+
+## 32. Testing Architecture
+
+Separate deterministic business behavior from Android scheduling where useful.
+
+Test:
+
+- Room migration;
+- DAO transitions;
+- sync result classification;
+- remote idempotency;
+- WorkManager request configuration;
+- server contract;
+- physical eventual retry.
+
+Do not rely only on sleeps/log observation for core state transitions.
+
+---
+
+## 33. Physical Upgrade Rule
+
+Instrumented tests may reinstall/alter app state.
+
+Do not use the same physical Phase 3 dataset for `connectedDebugAndroidTest` and then assume it still proves migration.
+
+Migration QA sequence must be deliberate:
+
+```text
+real v2 data
+→ install Phase 4 APK over it
+→ open
+→ verify preservation
+```
+
+---
+
+## 34. Product Reliability Principle
+
+The system is intentionally eventually consistent:
+
+```text
+Device: Vista immediately
+Server: acknowledged later
+```
+
+That is not a temporary workaround.
+
+It is the required architecture because the Mac/Tailscale path is less available than the phone's local Room state.
+
+---
+
+## 35. Architecture Acceptance
+
+Phase 4 architecture is accepted when:
+
+- local ACK remains independent;
+- Room contains durable pending remote work;
+- WorkManager only drains Room;
+- one unique worker handles backlog;
+- no periodic poller exists;
+- private HTTPS/Tailscale path is used;
+- server transition is idempotent;
+- retry classification is bounded;
+- no private content is added to ACK payload;
+- no generic sync/backend architecture is introduced.

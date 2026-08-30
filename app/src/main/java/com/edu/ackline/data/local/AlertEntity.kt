@@ -14,4 +14,7 @@ data class AlertEntity(
     val receivedAtEpochMillis: Long,
     val acknowledgedAtEpochMillis: Long?,
     val ackSyncState: String,
+    val ackSyncedAtEpochMillis: Long? = null,
+    val lastAckError: String? = null,
+    val ackToken: String? = null,
 )

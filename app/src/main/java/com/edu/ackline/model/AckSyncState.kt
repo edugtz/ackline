@@ -2,7 +2,9 @@ package com.edu.ackline.model
 
 enum class AckSyncState(val storageValue: String) {
     NONE("none"),
-    PENDING("pending");
+    PENDING("pending"),
+    SYNCED("synced"),
+    ERROR("error");
 
     companion object {
         fun fromStorageValue(value: String): AckSyncState =

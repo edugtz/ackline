@@ -4,6 +4,7 @@ import androidx.room.testing.MigrationTestHelper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -61,7 +62,65 @@ class AcklineMigrationTest {
         }
     }
 
+    @Test
+    fun migrateV2ToV3PreservesAlertStateAndAddsNullableAckMetadata() {
+        helper.createDatabase(V2_DATABASE_NAME, 2).apply {
+            execSQL(
+                "INSERT INTO alerts (" +
+                    "notificationId, protocolVersion, level, title, message, " +
+                    "createdAtEpochMillis, receivedAtEpochMillis, " +
+                    "acknowledgedAtEpochMillis, ackSyncState" +
+                    ") VALUES (" +
+                    "'migration-v2-none', 1, 'remember', 'Unacknowledged', " +
+                    "'Non-sensitive migration test', 1000, 2000, NULL, 'none'" +
+                    ")",
+            )
+            execSQL(
+                "INSERT INTO alerts (" +
+                    "notificationId, protocolVersion, level, title, message, " +
+                    "createdAtEpochMillis, receivedAtEpochMillis, " +
+                    "acknowledgedAtEpochMillis, ackSyncState" +
+                    ") VALUES (" +
+                    "'migration-v2-pending', 1, 'urgent', 'Acknowledged', " +
+                    "'Non-sensitive migration test', 3000, 4000, 5000, 'pending'" +
+                    ")",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(
+            V2_DATABASE_NAME,
+            3,
+            true,
+            AcklineDatabase.MIGRATION_2_3,
+        ).apply {
+            query(
+                "SELECT notificationId, acknowledgedAtEpochMillis, ackSyncState, " +
+                    "ackSyncedAtEpochMillis, lastAckError, ackToken " +
+                    "FROM alerts ORDER BY notificationId",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("migration-v2-none", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+                assertEquals("none", cursor.getString(2))
+                assertNull(cursor.getString(3))
+                assertNull(cursor.getString(4))
+                assertNull(cursor.getString(5))
+
+                assertTrue(cursor.moveToNext())
+                assertEquals("migration-v2-pending", cursor.getString(0))
+                assertEquals(5_000L, cursor.getLong(1))
+                assertEquals("pending", cursor.getString(2))
+                assertNull(cursor.getString(3))
+                assertNull(cursor.getString(4))
+                assertNull(cursor.getString(5))
+            }
+            close()
+        }
+    }
+
     private companion object {
-        const val DATABASE_NAME = "ackline-migration-test.db"
+        const val DATABASE_NAME = "ackline-migration-v1-test.db"
+        const val V2_DATABASE_NAME = "ackline-migration-v2-test.db"
     }
 }

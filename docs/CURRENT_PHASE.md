@@ -4,843 +4,669 @@
 
 **PLANNED — READY FOR PREFLIGHT**
 
-Phase:
+Phase: `2 — Persistent Inbox and Alert Detail`
 
-```text
-1 — FCM Transport Reliability Gate
-```
+Implementation branch: `2-persistent-inbox`
 
-Implementation branch:
-
-```text
-1-fcm-reliability
-```
-
-Base branch:
-
-```text
-dev
-```
+Base branch: `dev`
 
 ---
 
 ## Objective
 
-Prove on the physical Oppo that FCM solves the specific delivery failure that motivated Ackline:
+Turn the proven Phase 1 FCM transport into the first real Ackline product:
 
-```text
-normal Android background use
-+
-screen off / idle
-+
-Wi-Fi ↔ mobile network transitions
-+
-temporary loss of connectivity
-```
+FCM data message → validate app protocol → persist locally in Room → deduplicate by `notificationId` → post native Android notification only for a newly inserted alert → expose the durable alert through Inbox and Alert Detail.
 
-must not require manually opening Ackline to restore push delivery.
+Phase 2 establishes **Room as the device inbox source of truth**.
 
-Phase 1 is a transport reliability gate.
+An alert must remain available after tray dismissal, app restart, process recreation, and device reboot.
 
-It is **not** the persistent inbox or acknowledgment phase.
-
-Do not expand product scope until this transport gate passes.
+Phase 2 does **not** implement explicit acknowledgment actions yet.
 
 ---
 
 ## Baseline Already Proven
 
-Phase 0 established the working foundation:
+Phase 0 established:
 
-```text
-Android project builds
-APK installs on the Oppo
-Ackline launches successfully
-notification permission works
-Firebase configuration is valid
-current FID registration works
-FID is visible and copyable
-Mac Firebase Admin credentials are external to the repository
-Mac can target the Oppo FID
-FCM accepts a fake data-only message
-AcklineMessagingService receives the fake message
-setup/debug UI surfaces the received test message
-```
+- Android project builds and installs on the Oppo.
+- Ackline launches successfully.
+- Notification permission works.
+- Firebase configuration is valid.
+- Current FID registration works.
+- FID can be copied from the setup surface.
+- Mac Firebase Admin credentials remain outside the repository.
+- Mac can target the Oppo through FCM data-only messages.
 
-A dark-mode readability defect discovered during physical-device QA was also fixed.
+Phase 1 established on the physical Oppo:
 
-These foundations are working.
+- native Android notifications work;
+- foreground delivery works;
+- background delivery works;
+- removing Ackline from Recents does not stop normal delivery;
+- screen-off delivery works;
+- mobile-data delivery works;
+- Wi-Fi → mobile works;
+- mobile → Wi-Fi works;
+- sending during a network transition recovers automatically;
+- airplane/offline recovery works;
+- natural idle works;
+- IMPORTANT survives the intended forced-Doze test;
+- multi-hour normal use did not require manually reopening Ackline to restore delivery.
 
-Do not redesign or reimplement them without a concrete Phase 1 requirement.
+The ntfy-style failure condition was not reproduced:
 
----
+> usable network + alert stuck + opening Ackline restores delivery
 
-## Product Principles
-
-Ackline remains:
-
-```text
-single-user
-Android-only
-small
-low-maintenance
-explicit-acknowledgment
-transport-isolated
-privacy-conscious
-```
-
-Reliability takes priority over feature expansion.
-
-Phase 1 continues using fake/non-sensitive test payload contents because application-level E2EE is a later phase.
+Do not redesign the proven FCM transport without a concrete Phase 2 reason.
 
 ---
 
-## Phase 1 Question
+## Product Principle
 
-This phase must answer:
+Ackline now moves from transport spike to persistent personal inbox.
 
-```text
-Can FCM continue delivering user-visible Ackline alerts on the real Oppo
-through normal Android background conditions and network transitions
-without requiring Ackline to be manually reopened?
-```
+Priority order remains:
 
-If the answer is not demonstrably yes, do not proceed to Phase 2.
+1. Reliability
+2. Simplicity
+3. Privacy
+4. Low maintenance
+5. UX quality
+6. Additional features
 
----
+The first real product UI must already feel intentional enough for daily personal use.
 
-## In Scope
-
-### FCM Transport
-
-Continue using:
-
-```text
-FCM data-only messages
-```
-
-Do not use an automatic FCM `notification` payload.
-
-Ackline must continue receiving messages through `FirebaseMessagingService` so app code controls:
-
-```text
-validation
-diagnostics
-native notification creation
-future persistence
-future decryption
-future acknowledgment
-```
-
-Only the first three are Phase 1 work.
+A technically correct CRUD list is not accepted.
 
 ---
 
-## Phase 1 Test Envelope
+## Phase 2 Question
 
-Use the smallest useful test envelope:
+> Can Ackline reliably turn each received alert into one durable local inbox item, present it clearly, and preserve it independently of Android notification-tray state?
 
-```text
-notification_id
-level
-title
-message
-sent_at
-```
-
-Supported levels:
-
-```text
-remember
-important
-urgent
-```
-
-Validation requirements:
-
-```text
-notification_id -> non-blank
-level           -> remember | important | urgent
-title           -> non-blank
-message         -> non-blank
-sent_at         -> non-blank
-```
-
-Malformed messages must fail safely.
-
-This is a transport/reliability test contract.
-
-It is **not** the final Room entity or long-term domain model.
+The answer must be demonstrably yes before Phase 3 adds explicit acknowledgment.
 
 ---
 
-## FCM Priority
+## Source-of-Truth Rules
 
-Use realistic FCM Android delivery priority:
+During Phase 2:
 
-```text
-remember   -> NORMAL
-important  -> HIGH
-urgent     -> HIGH
-```
+- **FCM** = transport only.
+- **Room** = device inbox truth.
+- **Android notification tray** = transient presentation only.
+- **SetupState** = development/setup diagnostic state only.
 
-High priority is only for user-visible alerts where immediate delivery is justified.
-
-Do not mark all background traffic high priority.
-
-The primary Phase 1 reliability matrix should use:
-
-```text
-important
-```
-
-because that represents an alert expected to reach the user promptly without using the most intrusive Android notification channel.
+A valid accepted alert must be persisted before relying on tray presentation.
 
 ---
 
-## Android Notification Channels
+## Protocol Normalization
 
-Create native Android notifications locally.
+Phase 1 used a temporary transport-test envelope with `sent_at`.
 
-Required channels:
+Phase 2 introduces the durable app contract before persistent data begins.
 
-```text
-Ackline · Remember
-Ackline · Important
-Ackline · Urgent
+Protocol version: `1`
+
+Required plaintext development fields:
+
+- `protocol`
+- `notification_id`
+- `level`
+- `title`
+- `message`
+- `created_at`
+
+Example:
+
+```json
+{
+  "protocol": "1",
+  "notification_id": "phase2-test-001",
+  "level": "important",
+  "title": "Ackline test",
+  "message": "Non-sensitive Phase 2 test",
+  "created_at": "2026-08-29T21:00:00Z"
+}
 ```
 
-Channel importance:
+Phase 2 uses `created_at` rather than the Phase 1 transport-spike `sent_at` because `created_at` is the durable Ackline/Hermes product timestamp.
 
-```text
-Remember   -> IMPORTANCE_LOW
-Important  -> IMPORTANCE_DEFAULT
-Urgent     -> IMPORTANCE_HIGH
-```
-
-Channel semantics:
-
-### Remember
-
-Low-interruption information worth retaining but not demanding immediate attention.
-
-### Important
-
-Normal user-visible Personal Admin alert expected to arrive promptly.
-
-### Urgent
-
-Exceptional alert where stronger interruption is justified.
-
-Phase 1 validates transport and notification delivery only.
-
-No `Visto` action exists yet.
+Only fake/non-sensitive payloads are allowed until the E2EE phase passes.
 
 ---
 
-## Android Receive Path
+## Protocol Validation
 
-`AcklineMessagingService` remains the Firebase boundary.
+`protocol`:
+- required;
+- exactly `"1"`.
 
-Its Phase 1 responsibilities are:
+`notification_id`:
+- required;
+- non-blank.
 
-```text
-receive FCM data-only message
-        ↓
-extract expected test fields
-        ↓
-validate payload
-        ↓
-capture received_at
-        ↓
-hand app-owned data to native notification component
-```
+`level` must be exactly one of:
+- `remember`
+- `important`
+- `urgent`
 
-Firebase-specific types should not spread further into the app.
+`title`:
+- required;
+- non-blank.
 
-The service should remain small.
+`message`:
+- required;
+- non-blank.
 
----
+`created_at`:
+- required;
+- must parse as a UTC/RFC3339-compatible instant.
 
-## Native Notification Component
+Prefer canonical sender output ending in `Z`.
 
-Introduce the smallest app-owned component necessary to post Android notifications.
+Malformed payload behavior:
 
-Expected concept:
-
-```text
-AcklineNotificationManager
-```
-
-Responsibilities:
-
-```text
-ensure notification channels exist
-map level -> channel
-post native Android notification
-capture/display diagnostic timestamp if useful
-```
-
-It must not implement:
-
-```text
-persistence
-deduplication database
-acknowledgment
-remote calls
-reconciliation
-```
-
-Those belong to later phases.
+- reject;
+- do not persist;
+- do not post a native notification;
+- do not crash;
+- emit bounded non-sensitive diagnostics only.
 
 ---
 
-## Diagnostics
+## App-Owned Incoming Type
 
-Phase 1 needs enough diagnostics to distinguish transport delay from application failure.
+Firebase-specific data must be converted at the transport boundary into an app-owned type.
 
-Useful metadata:
+Expected concept: `IncomingAlertEnvelope`
 
-```text
-notification_id
-level
-sent_at
-received_at
-displayed_at
-```
+Conceptual fields:
 
-Logging must remain bounded and non-sensitive.
+- `protocolVersion`
+- `notificationId`
+- `level`
+- `title`
+- `message`
+- `createdAt`
+- `receivedAt`
 
-Do not log:
-
-```text
-FID
-Firebase service-account contents
-private keys
-credentials
-real personal alert contents
-email/calendar/task contents
-```
-
-Fake Phase 1 test title/message values are acceptable.
+No Firebase SDK type may enter Room, repository, ViewModel, or Compose UI.
 
 ---
 
-## Mac Sender Harness
+## Alert Level
 
-Keep one repeatable Python Firebase Admin sender.
+Use one app-owned severity representation:
 
-Do not create competing sender implementations.
+- `REMEMBER`
+- `IMPORTANT`
+- `URGENT`
 
-The Phase 1 sender should support controlled sends using:
+Existing transport semantics remain:
 
-```text
---fid
---id
---level
---title
---message
-```
-
-`sent_at` should be generated by the sender.
-
-FCM Android priority must derive from `level`:
-
-```text
-remember   -> normal
-important  -> high
-urgent     -> high
-```
-
-Firebase Admin service-account credentials remain outside the repository.
-
-The FID must not be hardcoded in source.
+| Level | FCM priority | Android importance |
+|---|---|---|
+| REMEMBER | NORMAL | LOW |
+| IMPORTANT | HIGH | DEFAULT |
+| URGENT | HIGH | HIGH |
 
 ---
 
-## Expected Minimal Architecture
+## Room Persistence
 
-```text
-Mac test sender
-      |
-      | Firebase Admin SDK
-      | FCM data-only
-      v
-FCM
-      |
-      v
-AcklineMessagingService
-      |
-      | validate test envelope
-      | received_at
-      v
-AcklineNotificationManager
-      |
-      | level -> channel
-      | native notification
-      | displayed_at
-      v
-Android notification tray
-```
+Add Room as the device source of truth.
 
-No additional architectural layers are required unless preflight identifies a concrete need.
+Initial database version: `1`
 
----
+Requirements:
 
-## Likely File Scope
+- no destructive migration fallback;
+- export schema when cleanly supported by the chosen Room/KSP setup;
+- one database instance.
 
-Expected existing files to modify:
+Minimum Phase 2 entity: `AlertEntity`
 
-```text
-app/src/main/java/com/edu/ackline/push/AcklineMessagingService.kt
-tools/firebase_sender.py
-```
+Fields:
 
-Expected new production file:
+- `notificationId: String` — primary key
+- `protocolVersion: Int`
+- `level: String`
+- `title: String`
+- `message: String`
+- `createdAtEpochMillis: Long`
+- `receivedAtEpochMillis: Long`
+- `acknowledgedAtEpochMillis: Long?`
 
-```text
-app/src/main/java/com/edu/ackline/notifications/AcklineNotificationManager.kt
-```
+Every normal Phase 2 incoming alert starts with `acknowledgedAtEpochMillis = null`.
 
-Narrowly scoped test files may be added.
+`acknowledgedAt` exists because Phase 2 already exposes `Pendientes / Vistas`, but **Phase 2 must not add a production operation that changes it**. The explicit transition belongs to Phase 3.
 
-Other production files may change only if preflight identifies a concrete requirement.
+Do not add yet:
 
-This list is not permission to pre-create future-phase architecture.
+- `ackSyncState`
+- `ackSyncedAt`
+- `lastAckError`
+- remote ACK metadata
 
 ---
 
-## Existing Setup UI
+## Idempotent Receive Flow
 
-The existing setup/debug screen remains useful during Phase 1.
+`notificationId` is the business idempotency key.
+
+Required flow:
+
+FCM data arrives → validate protocol → create `IncomingAlertEnvelope` → insert into Room using primary-key/conflict-ignore semantics → if inserted, post native notification → if duplicate, do not insert again and do not repost.
+
+Do not use query-before-insert deduplication.
+
+The database uniqueness constraint is the race-safe authority.
+
+---
+
+## Persist Before Notify
+
+For a valid incoming alert:
+
+Room persist → native notification.
+
+Reason: **Room = truth; tray = presentation.**
+
+If notification permission is unavailable:
+
+- Room insert still succeeds;
+- alert remains visible in Inbox;
+- tray notification may be skipped.
+
+If Room persistence fails:
+
+- do not pretend the alert is durably received;
+- do not create a tray-only source of truth;
+- log bounded diagnostics.
+
+Do not add WorkManager to solve this in Phase 2.
+
+---
+
+## Duplicate Delivery Semantics
+
+For the same `notification_id`, Ackline must produce:
+
+- one Room row;
+- one logical Inbox item;
+- no repeated native notification after the item is already known.
+
+Key physical QA:
+
+1. Receive one alert.
+2. Swipe its tray notification away.
+3. Send the same `notification_id` again.
+4. Inbox remains one row.
+5. Tray notification does **not** reappear.
+
+---
+
+## Room Queries
+
+At minimum:
+
+- observe pending alerts;
+- observe viewed alerts;
+- observe/find alert by `notificationId`.
+
+Ordering: `createdAt DESC`, then `receivedAt DESC` as deterministic secondary ordering.
+
+Pending: `acknowledgedAt IS NULL`
+
+Viewed: `acknowledgedAt IS NOT NULL`
+
+Phase 2 production data will normally remain entirely pending until Phase 3 introduces explicit acknowledgment.
+
+Tests and Compose previews may construct viewed fixtures. Do not add hidden runtime acknowledgment/debug actions merely to populate Vistas.
+
+---
+
+## Manual Dependency Wiring
+
+Use the smallest maintainable dependency wiring.
+
+Preferred concept: `AcklineApplication` owns one `AcklineDatabase` and one `AlertRepository`.
+
+Both the FCM service and UI/ViewModel need access to the same repository.
+
+Do not add Hilt, Koin, or a generic DI framework.
+
+---
+
+## Local Backup Policy
+
+Phase 2 introduces persistent alert contents.
+
+Set `android:allowBackup="false"` for the MVP unless a later explicit privacy/product decision reverses it.
+
+Do not build backup/restore infrastructure in Phase 2.
+
+Hermes/reconciliation is the future logical recovery path.
+
+---
+
+## Inbox Screen
+
+Required hierarchy:
+
+- small source/eyebrow label, e.g. `PERSONAL ADMIN`;
+- `Inbox`;
+- pending count;
+- compact `Pendientes | Vistas` filter;
+- chronological alert list.
+
+Each row should expose:
+
+- severity;
+- title;
+- short message summary;
+- concise timestamp;
+- pending/viewed context.
+
+Prefer flat list hierarchy, restrained dividers, intentional spacing, small severity treatment, and clear typography.
+
+Avoid card soup, gradients, glassmorphism, oversized Material components, emoji icons, random colors, dashboard widgets, and verbose helper copy.
+
+---
+
+## Pendientes / Vistas
+
+Provide a compact two-state filter:
+
+- `Pendientes`
+- `Vistas`
+
+Phase 2 behavior:
+
+- new alerts appear in Pendientes;
+- no normal user action moves an item to Vistas.
+
+Therefore Vistas may naturally show its empty state throughout Phase 2 production use. Phase 3 introduces the explicit state transition.
+
+---
+
+## Alert Detail
+
+Tapping an Inbox row opens Alert Detail.
+
+Detail must show:
+
+- severity;
+- full title;
+- full message;
+- created timestamp;
+- received timestamp when useful;
+- current pending/viewed status.
+
+Current Phase 2 status will normally be `Pendiente`.
+
+Do not add yet:
+
+- `Marcar como visto`;
+- `Visto` action;
+- ACK sync state;
+- remote diagnostics.
+
+Opening detail must not modify persistence state.
+
+---
+
+## Existing Setup Surface
 
 Preserve:
 
-```text
-notification permission state
-FCM registration state
-FID display/copy
-last test message diagnostics
-dark-mode readability fix
-```
+- notification permission;
+- FCM registration;
+- FID display/copy;
+- last test message;
+- current dark-mode readability.
 
-Do not turn the setup screen into the final Ackline product UI.
+Setup must remain reachable from the app through a small intentional entry.
 
-UI polish beyond keeping this diagnostic surface usable is out of scope.
+Do not make Setup the primary screen.
+
+---
+
+## Navigation
+
+Phase 2 needs only:
+
+- Inbox;
+- Alert Detail;
+- Setup.
+
+Do not add a navigation framework by default.
+
+A small root `AcklineApp` screen-state implementation is acceptable.
+
+If preflight determines Navigation Compose materially reduces complexity, it must justify the dependency before implementation.
+
+---
+
+## Android Notification Tap
+
+A neutral content intent that opens Ackline is allowed.
+
+Requirements:
+
+- tap may open the app;
+- tap must **not** acknowledge;
+- tap must not mutate Room state.
+
+Direct notification-to-detail routing is optional and not required in Phase 2.
+
+---
+
+## FCM Sender
+
+Continue using exactly one sender: `tools/firebase_sender.py`.
+
+Update the fake Phase 2 contract to send:
+
+- `protocol`
+- `notification_id`
+- `level`
+- `title`
+- `message`
+- `created_at`
+
+Preserve FID targeting, level → FCM priority, external credentials, fake/non-sensitive content, and no FID printing.
+
+---
+
+## Dependencies Allowed
+
+Phase 2 may add only dependencies concretely needed for:
+
+- Room;
+- Room compiler/KSP;
+- Lifecycle/ViewModel;
+- lifecycle-aware Compose state collection.
+
+Navigation Compose is not approved by default; preflight must justify it.
+
+Do not add Hilt, Retrofit, WorkManager, kotlinx serialization merely for `Map<String, String>`, analytics, Firebase database products, or generic architecture frameworks.
+
+---
+
+## Existing FCM Reliability Must Not Regress
+
+After Room integration, physical QA must confirm:
+
+- FCM still arrives in background;
+- new alert persists;
+- native notification still appears;
+- removing Ackline from Recents still does not require manual reopen.
+
+A focused Phase 1 regression smoke is sufficient unless evidence indicates a broader regression.
 
 ---
 
 ## Out of Scope
 
-Do **not** add:
+Do **not** implement:
 
-```text
-Room
-persistent inbox
-alert detail screen
-Pendientes / Vistas
-Visto semantics
-local acknowledgment
-notification Visto action
-remote ACK
-ACK HTTP server
-WorkManager
-E2EE
-real Hermes notification contents
-Hermes notification_state.py integration
-reconciliation
-search
-analytics
-login/accounts
-multi-device
-Play Store work
-Hilt
-Retrofit
-multi-module architecture
-foreground service
-persistent WebSocket
-MQTT
-custom persistent connection
-custom reconnect loop
-battery-optimization exemption
-ColorOS/OEM-specific workaround without evidence
-```
+- explicit `Visto`;
+- `Marcar como visto`;
+- notification Visto action;
+- `acknowledge(notificationId)`;
+- remote ACK;
+- `ackSyncState`;
+- WorkManager;
+- Tailscale HTTP;
+- Hermes ACK endpoint;
+- E2EE;
+- AES-GCM;
+- Android Keystore;
+- real sensitive Hermes payloads;
+- Hermes production outbox integration;
+- reconciliation;
+- `onDeletedMessages()` recovery workflow;
+- search;
+- complex settings;
+- analytics;
+- authentication;
+- accounts;
+- multi-user;
+- multi-device;
+- Play Store work;
+- billing;
+- foreground service;
+- persistent socket;
+- MQTT;
+- ntfy integration;
+- ColorOS workaround;
+- Hilt;
+- Retrofit;
+- multi-module architecture;
+- generic use-case/interactor layers.
 
-Do not pre-create:
-
-```text
-database/
-repository/
-ack/
-security/
-sync/
-inbox/
-detail/
-```
-
-packages merely for future work.
+Do not pre-create future packages merely for later phases.
 
 ---
 
-## Reliability Gate
+## Product Quality Gate
 
-Physical-device testing on the Oppo is mandatory.
+Phase 2 cannot close on functional QA alone.
 
-Required cases:
+Required:
 
-```text
-1. foreground baseline
-2. background
-3. removed from Recents without Force Stop
-4. screen off
-5. Wi-Fi
-6. mobile data
-7. Wi-Fi -> mobile
-8. mobile -> Wi-Fi
-9. message sent during network transition
-10. airplane mode -> send -> restore connectivity
-11. device idle / Doze
-12. multiple sends during multi-hour normal use
-```
+- physical Oppo screenshot review;
+- light-mode review;
+- dark-mode review;
+- Inbox hierarchy review;
+- Detail readability review;
+- empty-state review;
+- Pendientes/Vistas treatment review.
 
-Minor transport delay during network transition or temporary offline recovery is acceptable.
-
-Requiring the user to manually reopen Ackline is not.
+If the UI feels like generated CRUD, the phase is not complete.
 
 ---
 
-## Critical Failure Condition
+## Automated Testing
 
-The defining failure condition is:
+Meaningful deterministic coverage should include protocol parsing:
 
-```text
-usable Wi-Fi or mobile connectivity
-+
-IMPORTANT alert does not arrive
-+
-opening Ackline causes it to arrive or restores subsequent delivery
-=
-PHASE 1 FAIL
-```
+- valid v1 envelope accepted;
+- wrong protocol rejected;
+- missing required field rejected;
+- blank required field rejected;
+- invalid level rejected;
+- invalid `created_at` rejected.
 
-This must not be explained away as acceptable behavior.
+Prefer a small Room instrumented test where practical:
 
-It reproduces the exact class of failure Ackline is intended to eliminate.
+- first `notificationId` insert succeeds;
+- duplicate insert is ignored;
+- one row remains;
+- pending query returns new row;
+- viewed query distinguishes an acknowledged fixture;
+- ordering is deterministic.
 
----
-
-## Force Stop
-
-Android:
-
-```text
-Settings -> Apps -> Ackline -> Force Stop
-```
-
-is not equivalent to:
-
-```text
-Home
-normal background
-screen off
-swiping the app from Recents
-```
-
-Force Stop may intentionally suppress application delivery until the user launches the app again.
-
-It is not part of the normal Phase 1 pass/fail matrix.
-
-It may be tested separately for documentation if useful.
-
----
-
-## ColorOS Policy
-
-Test normal/default device behavior first.
-
-Do not proactively require:
-
-```text
-foreground service
-lock Ackline in Recents
-auto-launch workaround
-battery optimization exemption
-OEM-specific background service
-custom socket
-```
-
-If a reproducible Oppo failure occurs:
-
-```text
-reproduce
-        ↓
-collect evidence
-        ↓
-determine whether failure is:
-FCM / app / Play Services / Doze / ColorOS
-        ↓
-research current platform behavior
-        ↓
-propose smallest evidence-backed mitigation
-```
-
-Do not weaken the reliability gate just because an OEM workaround exists.
-
-Any required ColorOS setting must be explicitly documented.
-
----
-
-## Initial Smoke Gate
-
-Before running the full matrix, prove three basic cases:
-
-```text
-A. foreground + Wi-Fi + IMPORTANT
-B. background + Wi-Fi + IMPORTANT
-C. removed from Recents + Wi-Fi + IMPORTANT
-```
-
-Expected for each:
-
-```text
-native Android notification appears
-without requiring Ackline to be reopened
-```
-
-If one fails, stop the full matrix and diagnose first.
-
----
-
-## Acceptance Criteria
-
-Phase 1 is complete only when all applicable criteria are true:
-
-### Implementation
-
-- FCM remains data-only.
-- Phase 1 envelope is validated.
-- unsupported/malformed messages fail safely.
-- Firebase-specific code remains bounded.
-- native Android notifications are created locally.
-- Remember / Important / Urgent channels exist.
-- channel importance mapping is correct.
-- FCM priority mapping is correct.
-- sender remains repeatable and credential-safe.
-
-### Reliability
-
-- foreground delivery works.
-- background delivery works.
-- removal from Recents does not stop normal delivery.
-- screen-off delivery works.
-- mobile-data delivery works.
-- Wi-Fi -> mobile transition works without reopening Ackline.
-- mobile -> Wi-Fi transition works without reopening Ackline.
-- message sent during a transition eventually arrives automatically.
-- message sent while temporarily offline arrives after connectivity returns.
-- IMPORTANT survives the intended Doze test.
-- multiple sends during normal multi-hour use do not expose a reconnect/open-app failure.
-
-### Scope / Security
-
-- no Room or inbox was added.
-- no ACK semantics were added.
-- no WorkManager was added.
-- no E2EE was added.
-- no Hermes production integration was added.
-- no unnecessary OEM workaround was added.
-- no foreground service/custom socket was added.
-- no secret or sensitive content is exposed in source or logs.
-
-### Quality
-
-- automated build/test validation passes.
-- independent review passes.
-- physical-device QA passes.
-- final pushed-branch ChatGPT + GitHub review passes.
+Do not add Robolectric or large test infrastructure solely for this phase.
 
 ---
 
 ## Automated Validation
 
-Run at minimum:
+At minimum:
 
 ```bash
-./gradlew clean lintDebug testDebugUnitTest assembleDebug
-git diff --check
-```
-
-Validate Python syntax:
-
-```bash
+./gradlew clean kspDebugKotlin lintDebug testDebugUnitTest assembleDebug
 python -m py_compile tools/firebase_sender.py
+git diff --check
+git status --short --untracked-files=all
 ```
 
-Add automated tests only for deterministic logic where they provide real value.
+If Room instrumented tests are added:
 
-Examples:
-
-```text
-level validation
-level -> Android channel mapping
-malformed envelope rejection
-sender priority mapping
-```
-
-Do not create mocks that pretend to prove physical FCM reliability.
-
----
-
-## Physical QA Record
-
-For every significant test record:
-
-```text
-test case
-notification_id
-level
-sent_at
-received_at if available
-network state
-screen state
-app state
-arrival behavior
-result
-```
-
-Do not use real personal content.
-
-Example:
-
-```text
-wifi-to-mobile-003
-IMPORTANT
-send: 14:31:02
-Wi-Fi disabled immediately after send
-mobile network healthy
-screen off
-arrived: 14:31:05
-PASS
+```bash
+./gradlew connectedDebugAndroidTest
 ```
 
 ---
 
-## AI Implementation / Review Route
+## Manual QA
 
-### Planning / architecture
+Required physical Oppo cases:
 
-```text
-ChatGPT + GitHub
-```
+1. Launch Inbox.
+2. Send one unique fake alert.
+3. Native notification appears.
+4. Inbox receives exactly one persistent row.
+5. Send several unique alerts and verify chronological order.
+6. Open an alert and verify full detail.
+7. Opening detail leaves it pending.
+8. Swipe tray notification away.
+9. Inbox row remains.
+10. Re-send the same `notification_id`.
+11. Inbox still contains one row.
+12. Dismissed duplicate does not repost the native notification.
+13. Relaunch app; rows remain.
+14. Kill/restart process; rows remain.
+15. Reboot Oppo; rows remain.
+16. Pendientes contains new alerts.
+17. Vistas empty state is intentional.
+18. Setup/FID surface remains reachable.
+19. Background FCM regression smoke still passes.
+20. Removed-from-Recents regression smoke still passes.
+21. Review light-mode screenshots.
+22. Review dark-mode screenshots.
 
-The phase is already planned here.
+No real personal alert contents.
 
-Do not ask another model to redesign the phase.
+---
 
-### Preflight
+## AI Route
 
-```text
-/local-build
-Qwen3.8 27B 4bit + DFlash2
-```
+Planning/architecture: `ChatGPT + GitHub`
 
-Preflight:
+Preflight: `/local-quality` preferred, or `/local-build` if repository discovery remains straightforward.
 
-```text
-read repository
-inspect current implementation
-identify exact files
-identify risks
-propose bounded implementation
-STOP
-```
+Primary implementation: `/local-quality` — Qwen3.8 27B 5bit + DFlash2.
 
-No edits before approval.
+Android/Room/KSP runtime escalation: `Gemini Android Studio`.
 
-### Primary implementation
+Independent review: `/local-review` — Qwen3.8 27B AWQ 5bpw + Lightning MTP.
 
-```text
-/local-build
-Qwen3.8 27B 4bit + DFlash2
-```
+If UI remains generic/CRUD-like after one focused pass, use the premium UI route defined in `docs/AI_WORKFLOW.md`.
 
-### Higher-quality local fallback
-
-```text
-/local-quality
-Qwen3.8 27B 5bit + DFlash2
-```
-
-### Android / Firebase / Doze / ColorOS specialist
-
-```text
-Gemini Android Studio
-```
-
-Use only for concrete platform/tooling/runtime diagnosis.
-
-### Independent reviewer
-
-```text
-/local-review
-Qwen3.8 27B AWQ 5bpw + Lightning MTP
-```
-
-Review only.
-
-No edits.
-
-### Final review
-
-After the implementation branch is committed and pushed:
-
-```text
-ChatGPT + GitHub
-```
-
-Verdict:
-
-```text
-PASS
-PASS_WITH_NOTES
-BLOCKED
-```
-
-Merge to `dev` only after PASS by default.
+Final pushed-branch review: `ChatGPT + GitHub`.
 
 ---
 
 ## Workflow
 
-```text
-update Phase 1 docs
-        ↓
-commit planning docs
-        ↓
-preflight
-        ↓
-ChatGPT/user approval
-        ↓
-builder implementation
-        ↓
-automated validation
-        ↓
-basic physical smoke tests
-        ↓
-independent review
-        ↓
-full physical reliability matrix
-        ↓
-multi-hour real-use test
-        ↓
-user commit/push
-        ↓
-ChatGPT GitHub final review
-        ↓
-PASS
-        ↓
-merge 1-fcm-reliability -> dev
-```
+create `2-persistent-inbox` from `dev` → replace Phase 2 planning docs → commit planning docs → preflight → ChatGPT/user approval → implementation → automated validation → Room/idempotency QA → physical-device QA → screenshot/product review → independent `/local-review` → resolve blockers → user commit/push → ChatGPT GitHub final review → PASS → merge to `dev`.
 
 The user owns commits and pushes.
 
@@ -848,42 +674,47 @@ The user owns commits and pushes.
 
 ## Completion Criteria
 
-All true:
+All must be true:
 
-```text
-FCM data-only path preserved
-native notifications work
-priority mapping correct
-channels correct
-malformed payloads safe
-build/test validation passes
-basic Oppo smoke gate passes
-Wi-Fi/mobile transition matrix passes
-offline recovery passes
-Doze IMPORTANT test passes
-multi-hour normal-use test passes
-opening Ackline is never required to restore normal delivery
-no unjustified ColorOS workaround
-independent review passes
-final pushed-branch review PASS
-```
+- Room is local inbox truth.
+- Database version 1 exists.
+- No destructive migration fallback.
+- Incoming FCM is converted to an app-owned envelope.
+- Protocol v1 is validated.
+- `created_at` is parsed.
+- Alert persists before notification posting.
+- `notificationId` is the Room primary key.
+- Duplicate delivery creates one row.
+- Duplicate delivery does not repost a known alert.
+- Tray dismissal does not remove the Room alert.
+- App restart preserves alerts.
+- Process restart preserves alerts.
+- Device reboot preserves alerts.
+- Inbox is chronological.
+- Pendientes / Vistas UI exists.
+- Alert Detail works.
+- Opening app does not acknowledge.
+- Opening detail does not acknowledge.
+- No explicit ACK action exists yet.
+- Setup remains reachable.
+- Background FCM regression smoke passes.
+- Fake/non-sensitive payloads only.
+- Backup policy is explicit.
+- No future-phase architecture.
+- Automated validation passes.
+- Independent review passes.
+- Physical QA passes.
+- UI screenshot review passes.
+- Final pushed-branch GitHub review = PASS.
 
 ---
 
-## Suggested Commit
+## Suggested Commits
 
-Planning docs:
+Planning: `docs: plan Phase 2 persistent inbox`
 
-```text
-docs: plan Phase 1 FCM reliability gate
-```
-
-Final Phase 1 implementation:
-
-```text
-feat: prove FCM background delivery
-```
+Implementation: `feat: add persistent alert inbox`
 
 Do not commit automatically.
 
-The user owns commit and push.
+The user owns commits and pushes.

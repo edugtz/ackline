@@ -41,7 +41,7 @@ import java.util.Locale
 
 @Composable
 fun InboxScreen(
-    onAlertClick: (Alert) -> Unit,
+    onAlertClick: (String) -> Unit,
     onSetupClick: () -> Unit,
 ) {
     val viewModel: InboxViewModel = viewModel()
@@ -117,7 +117,8 @@ fun InboxScreen(
                     ) { alert ->
                         AlertRow(
                             alert = alert,
-                            onClick = { onAlertClick(alert) },
+                            onClick = { onAlertClick(alert.notificationId) },
+                            onAcknowledge = { viewModel.acknowledge(alert.notificationId) },
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 24.dp),
@@ -195,58 +196,73 @@ private fun InboxFilterTab(
 private fun AlertRow(
     alert: Alert,
     onClick: () -> Unit,
+    onAcknowledge: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 16.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick),
         ) {
-            SeverityDot(level = alert.level)
-            Spacer(modifier = Modifier.size(9.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SeverityDot(level = alert.level)
+                Spacer(modifier = Modifier.size(9.dp))
+                Text(
+                    text = severityLabel(alert.level),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = severityColor(alert.level),
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.8.sp,
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = if (alert.acknowledgedAt == null) "Pendiente" else "Vista",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(7.dp))
+
             Text(
-                text = severityLabel(alert.level),
-                style = MaterialTheme.typography.labelSmall,
-                color = severityColor(alert.level),
+                text = alert.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.SemiBold,
-                letterSpacing = 0.8.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = if (alert.acknowledgedAt == null) "Pendiente" else "Vista",
-                style = MaterialTheme.typography.labelSmall,
+                text = alert.message,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = formatAlertTime(alert.createdAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
             )
         }
 
-        Spacer(modifier = Modifier.height(7.dp))
-
-        Text(
-            text = alert.title,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = alert.message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = formatAlertTime(alert.createdAt),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.outline,
-        )
+        if (alert.acknowledgedAt == null) {
+            TextButton(
+                onClick = onAcknowledge,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text("Visto")
+            }
+        }
     }
 }
 

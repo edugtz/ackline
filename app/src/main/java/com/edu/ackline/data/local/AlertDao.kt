@@ -31,4 +31,16 @@ interface AlertDao {
 
     @Query("SELECT * FROM alerts WHERE notificationId = :notificationId")
     fun findById(notificationId: String): AlertEntity?
+
+    @Query(
+        "UPDATE alerts " +
+            "SET acknowledgedAtEpochMillis = :acknowledgedAtEpochMillis, " +
+            "    ackSyncState = 'pending' " +
+            "WHERE notificationId = :notificationId " +
+            "  AND acknowledgedAtEpochMillis IS NULL",
+    )
+    fun acknowledge(
+        notificationId: String,
+        acknowledgedAtEpochMillis: Long,
+    ): Int
 }

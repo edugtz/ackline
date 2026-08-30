@@ -1,12 +1,12 @@
-# Phase 2 — Persistent Inbox and Alert Detail Implementation Plan
+# Phase 3 — Explicit Local Acknowledgment Implementation Plan
 
 ## 1. Status
 
 **PLANNED — READY FOR PREFLIGHT**
 
-Phase: `2 — Persistent Inbox and Alert Detail`
+Phase: `3 — Explicit Local Acknowledgment`
 
-Implementation branch: `2-persistent-inbox`
+Implementation branch: `3-explicit-local-ack`
 
 Base branch: `dev`
 
@@ -14,41 +14,63 @@ Base branch: `dev`
 
 ## 2. Objective
 
-Implement the minimum durable Android data and UI layers required to convert the proven FCM path into a persistent Ackline inbox.
+Add exact, durable local acknowledgment semantics to the existing persistent Ackline Inbox.
 
 Required end state:
 
-FCM → `AcklineMessagingService` → `IncomingAlertEnvelope` → `AlertRepository` → Room → Inbox / Detail → native notification for newly inserted alerts only.
+pending Room alert  
+→ explicit `Visto` / `Marcar como visto`  
+→ atomic Room acknowledgment  
+→ `acknowledgedAt` persisted  
+→ `ackSyncState = pending`  
+→ matching Android notification canceled  
+→ Pendientes/Vistas update automatically.
 
-The implementation must preserve the Phase 1 FCM reliability behavior.
+Three explicit user surfaces must share the same local acknowledgment operation:
+
+1. notification action;
+2. Inbox row action;
+3. Alert Detail action.
+
+No remote ACK is performed in Phase 3.
 
 ---
 
 ## 3. Existing Working Foundation
 
-The repository already contains:
+The current `dev` baseline already has:
 
-- single `:app` Android module;
+- single Android `:app` module;
 - Kotlin / Compose / Material 3;
-- Firebase Messaging;
-- current FID registration;
-- `SetupState` + `SetupScreen`;
-- `AcklineMessagingService`;
-- `AcklineNotificationManager`;
-- three proven Android notification channels;
-- Python Firebase Admin sender;
-- Phase 1 payload validation;
-- Phase 1 deterministic tests.
+- Firebase Messaging data-only receive path;
+- FID registration;
+- three stable Ackline notification channels;
+- Room 2.8.4;
+- KSP 2.3.10;
+- Lifecycle 2.11.0;
+- database v1;
+- exported schema v1;
+- `AlertEntity`;
+- `AlertDao`;
+- `AcklineDatabase`;
+- `AlertRepository`;
+- app-owned `Alert` and `AlertLevel`;
+- `IncomingAlertEnvelope`;
+- race-safe insert dedupe by `notificationId`;
+- `AcklineApplication` manual wiring;
+- Inbox + Pendientes/Vistas;
+- Alert Detail;
+- Setup/FID screen;
+- Phase 2 persistence/instrumented tests;
+- fake FCM sender.
 
-Phase 1 physical delivery passed on the Oppo.
-
-Do not rebuild those pieces from scratch.
+Do not rebuild these pieces.
 
 ---
 
-## 4. Preflight Is Mandatory
+## 4. Mandatory Preflight
 
-Before editing, inspect:
+Before editing, inspect at minimum:
 
 - `AGENTS.md`
 - `docs/CURRENT_PHASE.md`
@@ -56,919 +78,913 @@ Before editing, inspect:
 - `docs/ARCHITECTURE.md`
 - `docs/PROJECT_SPEC.md`
 - `docs/ACCEPTANCE_CRITERIA.md`
-- `docs/AI_WORKFLOW.md`
-- `docs/MVP_PHASES.md`
+- Phase 3 section of `docs/MVP_PHASES.md`
 - `app/build.gradle.kts`
 - `gradle/libs.versions.toml`
 - `app/src/main/AndroidManifest.xml`
-- `MainActivity.kt`
-- `SetupState.kt`
-- `SetupScreen.kt`
-- `AcklineMessagingService.kt`
-- `AcklineNotificationManager.kt`
-- `tools/firebase_sender.py`
-- existing tests
+- `AcklineApplication.kt`
+- `model/Alert.kt`
+- `data/local/AlertEntity.kt`
+- `data/local/AlertDao.kt`
+- `data/local/AcklineDatabase.kt`
+- `data/AlertRepository.kt`
+- `notifications/AcklineNotificationManager.kt`
+- `push/AcklineMessagingService.kt`
+- `feature/inbox/InboxViewModel.kt`
+- `feature/inbox/InboxScreen.kt`
+- `feature/detail/AlertDetailScreen.kt`
+- `ui/AcklineApp.kt`
+- existing JVM/instrumented tests
+- exported schema v1
 - current git state
 
 Preflight is read-only.
 
 It must report:
 
-1. exact files to modify;
-2. exact files to create;
-3. Room/KSP version compatibility;
-4. dependency additions;
-5. database schema;
-6. manual dependency wiring;
-7. receive/persist/notify sequencing;
-8. duplicate behavior;
-9. UI/navigation shape;
-10. tests;
-11. validation commands;
-12. manual QA;
-13. risks and doc/code mismatches.
+- exact v1 → v2 migration;
+- exact schema;
+- exact shared acknowledgment abstraction;
+- exact receiver threading design;
+- exact PendingIntent identity strategy;
+- exact Inbox/Detail state flow;
+- exact files to change/create;
+- test plan;
+- validation;
+- physical QA.
 
-Stop before editing.
+Stop before implementation.
 
 ---
 
-## 5. Dependency Policy
+## 5. Database Version 2
 
-Phase 2 is expected to require:
+Update `AcklineDatabase` from version `1` to version `2`.
 
-- AndroidX Room runtime;
-- Room KTX only if actual APIs used justify it;
-- Room compiler through KSP;
-- Lifecycle ViewModel Compose;
-- Lifecycle Runtime Compose.
+Keep `exportSchema = true`.
 
-Current project baseline to respect:
+Do not delete schema v1.
 
-- AGP `9.3.2`
-- Compose compiler `2.2.10`
-- compile SDK `37`
-- target SDK `36`
-- min SDK `28`
-
-Do not guess incompatible Room/KSP versions.
-
-Preflight must verify the supported current combination.
-
-Do not add merely for convenience:
-
-- Hilt;
-- Retrofit;
-- WorkManager;
-- Navigation Compose;
-- kotlinx serialization;
-- Robolectric;
-- generic architecture libraries.
-
-Navigation Compose requires explicit preflight justification.
-
----
-
-## 6. KSP / Room Build Configuration
-
-Expected changes:
-
-- `gradle/libs.versions.toml`
-- `app/build.gradle.kts`
-
-Add the minimum Room/KSP configuration required by the current toolchain.
-
-Preferred database configuration:
-
-- Room database version = `1`;
-- `exportSchema = true`.
-
-If current Room/KSP integration supports a clean schema export directory, configure it and check generated schema metadata into source control where appropriate.
-
-Do **not** use `fallbackToDestructiveMigration()`.
-
-No migrations are required while the schema remains version 1.
-
----
-
-## 7. Backup Policy
-
-Current manifest has backup enabled.
-
-Phase 2 stores persistent alert contents.
-
-Modify `app/src/main/AndroidManifest.xml` and set:
-
-`android:allowBackup="false"`
-
-Do not build backup/restore infrastructure.
-
-Existing backup XML template files do not need to be deleted solely for cleanliness.
-
----
-
-## 8. Manual Application Wiring
-
-Expected new concept: `AcklineApplication`.
-
-Preferred responsibility:
-
-- create `AcklineDatabase` once;
-- create `AlertRepository` once;
-- expose the repository to app components.
-
-Conceptually:
-
-```kotlin
-class AcklineApplication : Application() {
-    val database by lazy { ... }
-    val alertRepository by lazy { AlertRepository(database.alertDao()) }
-}
-```
-
-Exact code is decided during implementation.
-
-Register the Application class in the manifest.
-
-Do not add Hilt, Koin, a service-locator framework, or a large `AppContainer` hierarchy.
-
----
-
-## 9. App-Owned Alert Model
-
-Create a small app-owned model rather than exposing Room or Firebase types across layers.
-
-Expected concept: `Alert` and `AlertLevel`.
-
-Potential path: `app/src/main/java/com/edu/ackline/model/Alert.kt`
-
-Conceptually:
-
-```kotlin
-enum class AlertLevel {
-    REMEMBER,
-    IMPORTANT,
-    URGENT,
-}
-
-data class Alert(
-    val notificationId: String,
-    val protocolVersion: Int,
-    val level: AlertLevel,
-    val title: String,
-    val message: String,
-    val createdAt: Instant,
-    val receivedAt: Instant,
-    val acknowledgedAt: Instant?,
-)
-```
-
-Do not introduce a generic domain/use-case layer.
-
----
-
-## 10. IncomingAlertEnvelope
-
-Expected path: `app/src/main/java/com/edu/ackline/push/IncomingAlertEnvelope.kt`
-
-Fields:
-
-- `protocolVersion`
-- `notificationId`
-- `level`
-- `title`
-- `message`
-- `createdAt`
-- `receivedAt`
-
-No Firebase SDK types.
-
----
-
-## 11. Protocol Parser
-
-Refactor the Phase 1 parser into the Phase 2 durable contract.
-
-Input: `Map<String, String>`
-
-Expected keys:
-
-- `protocol`
-- `notification_id`
-- `level`
-- `title`
-- `message`
-- `created_at`
-
-Validation:
-
-- `protocol == "1"`
-- `notification_id` nonblank
-- valid level
-- title nonblank
-- message nonblank
-- `created_at` parses as `Instant`
-
-Capture `receivedAt = Instant.now()` after the wire payload is accepted.
-
-Malformed payload:
-
-- rejection;
-- no Room insert;
-- no native notification;
-- bounded generic log.
-
-Do not add JSON serialization just for this string map.
-
----
-
-## 12. Sender Contract
-
-Modify the existing `tools/firebase_sender.py`.
-
-Do not create another sender.
-
-Phase 2 payload:
-
-- `protocol = "1"`
-- `notification_id`
-- `level`
-- `title`
-- `message`
-- `created_at`
-
-Generate canonical UTC ending in `Z`.
-
-Continue FCM priority:
-
-| Level | Priority |
-|---|---|
-| remember | normal |
-| important | high |
-| urgent | high |
-
-Continue FID targeting through `messaging.Message(..., fid=args.fid)`.
-
-Continue external credential loading.
-
-Do not print FID or credential contents.
-
----
-
-## 13. Room Entity
-
-Expected path: `app/src/main/java/com/edu/ackline/data/local/AlertEntity.kt`
-
-Conceptual schema:
-
-```kotlin
-@Entity(tableName = "alerts")
-data class AlertEntity(
-    @PrimaryKey val notificationId: String,
-    val protocolVersion: Int,
-    val level: String,
-    val title: String,
-    val message: String,
-    val createdAtEpochMillis: Long,
-    val receivedAtEpochMillis: Long,
-    val acknowledgedAtEpochMillis: Long?,
-)
-```
-
-Use Room-friendly primitive storage.
-
-Avoid type converters unless they materially simplify the implementation.
-
-Normal Phase 2 incoming rows always use `acknowledgedAtEpochMillis = null`.
-
-Do not add:
-
-- `ackSyncState`
-- `ackSyncedAt`
-- `lastAckError`
-- server IDs
-- tags
-- categories
-- metadata blobs
-
----
-
-## 14. DAO
-
-Expected path: `app/src/main/java/com/edu/ackline/data/local/AlertDao.kt`
-
-Minimum operations:
-
-- `insertIgnore(alert)`
-- `observePending()`
-- `observeViewed()`
-- `observeById(notificationId)` or equivalent
-
-Ordering:
-
-`ORDER BY createdAtEpochMillis DESC, receivedAtEpochMillis DESC`
-
-Pending:
-
-`WHERE acknowledgedAtEpochMillis IS NULL`
-
-Viewed:
-
-`WHERE acknowledgedAtEpochMillis IS NOT NULL`
-
-Insertion must use conflict-ignore behavior and return enough information to know whether the row was newly inserted.
-
-Do not query before insert for deduplication.
-
----
-
-## 15. Database
-
-Expected path: `app/src/main/java/com/edu/ackline/data/local/AcklineDatabase.kt`
-
-Requirements:
-
-```kotlin
-@Database(
-    entities = [AlertEntity::class],
-    version = 1,
-    exportSchema = true,
-)
-```
-
-Single database instance.
-
-Database name may be `ackline.db`.
+Generate and check in schema v2.
 
 No destructive fallback.
 
-No migration class is needed until a schema version changes.
+---
+
+## 6. Schema Change
+
+Add exactly one Phase 3 persistence field:
+
+`ackSyncState: String`
+
+Expected `AlertEntity` shape after migration:
+
+- `notificationId`
+- `protocolVersion`
+- `level`
+- `title`
+- `message`
+- `createdAtEpochMillis`
+- `receivedAtEpochMillis`
+- `acknowledgedAtEpochMillis`
+- `ackSyncState`
+
+Do not add:
+
+- `ackSyncedAtEpochMillis`
+- `lastAckError`
+- retries
+- remote status codes
+- server metadata
 
 ---
 
-## 16. Repository
+## 7. AckSyncState
 
-Expected path: `app/src/main/java/com/edu/ackline/data/AlertRepository.kt`
+Expected app-owned enum:
 
-Responsibilities only:
+`AckSyncState`
 
-- map `IncomingAlertEnvelope` → `AlertEntity`;
-- insert incoming alert idempotently;
-- report inserted vs duplicate;
-- observe pending alerts as app-owned `Alert`;
-- observe viewed alerts as app-owned `Alert`;
-- observe/find alert by ID when needed.
+Phase 3 values:
+
+- `NONE("none")`
+- `PENDING("pending")`
+
+Potential location:
+
+`model/AckSyncState.kt`
+
+or colocated with `Alert.kt` if that keeps the model cleaner.
+
+Do not add future `SYNCED` / `ERROR` behavior in Phase 3.
+
+`Alert` should expose:
+
+`ackSyncState: AckSyncState`
+
+Invalid stored values should fail clearly or be handled defensively according to preflight findings; do not silently reinterpret an unknown state as a valid ACK.
+
+---
+
+## 8. New Alert Defaults
+
+Update the `IncomingAlertEnvelope` → `AlertEntity` mapping.
+
+Every newly received Phase 3 alert must persist:
+
+`acknowledgedAtEpochMillis = null`
+
+and:
+
+`ackSyncState = "none"`
+
+The FCM protocol does not carry local ACK state.
+
+Never trust remote transport input for these local fields.
+
+---
+
+## 9. Migration 1 → 2
+
+Expected migration:
+
+```sql
+ALTER TABLE alerts
+ADD COLUMN ackSyncState TEXT NOT NULL DEFAULT 'none'
+```
+
+Expose the migration from the database layer using a clearly named constant such as:
+
+`MIGRATION_1_2`
+
+Register it in:
+
+`Room.databaseBuilder(...).addMigrations(MIGRATION_1_2)`
+
+The migration must preserve the existing Room database.
+
+Do not reinstall/clear app data to avoid testing migration.
+
+The physical Oppo upgrade must exercise the real migration.
+
+---
+
+## 10. Atomic DAO Acknowledgment
+
+Add a guarded SQL update.
+
+Preferred concept:
+
+```sql
+UPDATE alerts
+SET acknowledgedAtEpochMillis = :acknowledgedAtEpochMillis,
+    ackSyncState = 'pending'
+WHERE notificationId = :notificationId
+  AND acknowledgedAtEpochMillis IS NULL
+```
+
+DAO method returns affected row count.
+
+This creates an atomic local transition.
+
+Important:
+
+- first ACK updates one row;
+- second ACK updates zero rows;
+- original acknowledgment timestamp is preserved;
+- unknown ID updates zero rows.
+
+Do not SELECT-before-UPDATE for the initial state transition.
+
+A lookup after a zero-row result is acceptable only if the app needs to distinguish `ALREADY_ACKNOWLEDGED` from `NOT_FOUND`.
+
+---
+
+## 11. Repository Acknowledgment API
+
+Extend `AlertRepository` with a narrow operation appropriate to the final threading design.
+
+Concept:
+
+`acknowledge(notificationId, acknowledgedAt): AcknowledgeResult`
+
+Possible result:
+
+- `ACKNOWLEDGED`
+- `ALREADY_ACKNOWLEDGED`
+- `NOT_FOUND`
+
+The repository should:
+
+- perform the Room update;
+- map storage state;
+- remain Android-notification agnostic.
+
+Do not make the repository own `NotificationManager`.
+
+Do not add networking.
+
+---
+
+## 12. Shared LocalAcknowledgmentManager
+
+Create one small app-level orchestrator.
+
+Expected path:
+
+`app/src/main/java/com/edu/ackline/ack/LocalAcknowledgmentManager.kt`
+
+This package is allowed because Phase 3 is the ACK phase.
+
+Responsibilities:
+
+1. ask repository to acknowledge;
+2. preserve idempotent result;
+3. cancel the matching native notification for acknowledged/already-acknowledged rows;
+4. return a small result if callers need it.
+
+Do not:
+
+- call HTTP;
+- enqueue WorkManager;
+- know Tailscale;
+- know Hermes transport;
+- implement retries.
+
+This is not a generic use-case layer.
+
+It is one concrete cross-layer product operation.
+
+---
+
+## 13. AcklineApplication Wiring
+
+Extend the current manual graph.
+
+Expected ownership:
+
+`AcklineApplication`
+- `database`
+- `alertRepository`
+- `localAcknowledgmentManager`
+- optional `acknowledgmentExecutor`
+
+The executor is justified only for the manifest BroadcastReceiver path.
+
+Keep one small executor rather than creating a new thread pool per ACK.
+
+Do not add DI frameworks.
+
+---
+
+## 14. Notification Cancellation API
+
+Extend `AcklineNotificationManager` with a small operation:
+
+`cancel(context, notificationId)`
+
+It must use the exact same stable integer ID formula used to post:
+
+`notificationId.hashCode()`
+
+Do not use `cancelAll()`.
+
+Do not cancel other alerts.
+
+---
+
+## 15. Notification Action Intent
+
+Add a notification action to every newly posted alert:
+
+`Visto`
+
+Use a broadcast `PendingIntent`.
+
+Expected receiver:
+
+`AcknowledgeReceiver`
+
+Use a namespaced action string, for example:
+
+`com.edu.ackline.action.ACKNOWLEDGE`
+
+Include the business `notificationId`.
+
+PendingIntent identity must be unique per alert.
+
+Do not rely only on extras for PendingIntent identity because extras are not part of PendingIntent matching.
+
+Use an identity mechanism such as:
+
+- unique requestCode based on the existing notification ID plus
+- a unique `Intent.data` URI derived from an encoded `notificationId`
+
+if preflight confirms that as the smallest robust design.
+
+Use immutable PendingIntent flags.
+
+The receiver must still validate the supplied business ID.
+
+---
+
+## 16. AcknowledgeReceiver
+
+Expected path:
+
+`app/src/main/java/com/edu/ackline/ack/AcknowledgeReceiver.kt`
+
+Manifest:
+
+`android:exported="false"`
+
+`onReceive()` must:
+
+1. reject unrelated/malformed intents quickly;
+2. call `goAsync()`;
+3. submit the bounded local ACK operation to the app-owned executor;
+4. always call `PendingResult.finish()` in `finally`.
+
+Do not block Room disk IO on the receiver main thread.
+
+Do not use WorkManager.
+
+Do not start an Activity.
+
+Do not perform network access.
+
+---
+
+## 17. Receiver Error Behavior
+
+A malformed/stale notification action must not crash the app.
+
+Use bounded diagnostics only.
+
+If acknowledgment fails due to a local unexpected exception:
+
+- keep database truth unchanged;
+- avoid false success;
+- call `finish()`;
+- log a generic bounded error;
+- do not retry forever.
+
+Phase 3 does not need a user-facing error toast from the notification action.
+
+---
+
+## 18. Inbox ViewModel
+
+The existing `InboxViewModel` already observes Room.
+
+Extend it with an explicit method such as:
+
+`acknowledge(notificationId)`
+
+The ViewModel should run the blocking local acknowledgment manager off the main thread using the existing coroutine/lifecycle facilities.
+
+Expected result:
+
+Room Flow drives all visual changes.
+
+Do not manually remove the row from `pendingAlerts`.
+
+Do not manually insert into `viewedAlerts`.
+
+Do not duplicate state outside Room.
+
+---
+
+## 19. Inbox UI
+
+For a pending row, replace the passive repeated `Pendiente` affordance with a compact explicit action where appropriate:
+
+`Visto`
+
+The row itself remains clickable for Detail.
+
+The `Visto` action must be a distinct click target and must not also trigger navigation.
+
+After acknowledgment:
+
+- the row leaves Pendientes;
+- pending count changes;
+- row appears in Vistas;
+- no `Visto` action remains.
+
+Viewed rows may show a restrained `Vista` status.
+
+Do not use:
+
+- giant full-width CTA per row;
+- checkbox semantics;
+- swipe-to-ack;
+- long explanatory copy.
+
+---
+
+## 20. Detail Must Become Live
+
+Phase 2 uses:
+
+`AppScreen.Detail(alert: Alert)`
+
+That snapshot is no longer sufficient once the Detail screen can change acknowledgment state.
+
+Change the root screen state to identify Detail by:
+
+`notificationId`
+
+Expected:
+
+`AppScreen.Detail(notificationId: String)`
+
+Introduce:
+
+`AlertDetailViewModel`
+
+It should observe:
+
+`repository.observeById(notificationId)`
+
+so Detail always displays current Room truth.
+
+A small explicit factory is acceptable because the ID is a runtime argument.
+
+Do not add Navigation Compose only for this.
+
+---
+
+## 21. AlertDetailViewModel
+
+Expected path:
+
+`feature/detail/AlertDetailViewModel.kt`
+
+Responsibilities:
+
+- observe one alert by ID;
+- expose current app-owned alert state;
+- invoke shared local acknowledgment manager when explicitly requested.
 
 No networking.
 
-No ACK.
+No ACK retry.
 
-No WorkManager.
+No Firebase.
 
-No Hermes logic.
-
-No Firebase types.
-
-A Boolean or tiny result enum such as `INSERTED` / `DUPLICATE` is enough.
-
-Do not build a generic repository framework.
+No UI formatting logic beyond state.
 
 ---
 
-## 17. Receive Flow
+## 22. Alert Detail UI
 
-Modify `AcklineMessagingService.kt`.
-
-Required sequence:
-
-RemoteMessage → validate/parse → `IncomingAlertEnvelope` → persist through `AlertRepository` → if INSERTED, `AcklineNotificationManager.show(...)` → if DUPLICATE, bounded diagnostic only.
-
-Persistence must complete before native notification posting.
-
-The service callback must remain bounded.
-
-Preflight must explicitly inspect the safest simple Room call/threading pattern for current Firebase/Room APIs.
-
-Do not solve a local database write by adding WorkManager.
-
-Do not launch fire-and-forget work that can outlive the service callback without understanding its lifecycle.
-
-If the correct threading/lifecycle approach is unclear, stop and escalate to the Android platform route rather than inventing concurrency architecture.
-
----
-
-## 18. Notification Manager
-
-Modify only as required: `AcklineNotificationManager.kt`.
-
-Preferred improvement:
-
-- accept validated `AlertLevel` or app-owned values;
-- retain existing channel IDs;
-- retain existing channel names;
-- retain existing importance mapping.
-
-Stable channels remain:
-
-- `ackline_remember` — `Ackline · Remember`
-- `ackline_important` — `Ackline · Important`
-- `ackline_urgent` — `Ackline · Urgent`
-
-Do not recreate them under new IDs.
-
-The temporary small icon remains acceptable for Phase 2.
-
-A neutral PendingIntent that opens `MainActivity` is allowed if implementation is small.
-
-It must not acknowledge, mark viewed, or mutate Room.
-
-Direct notification-to-detail routing is optional.
-
----
-
-## 19. MainActivity
-
-Modify `MainActivity.kt`.
-
-Preserve:
-
-- `FirebaseMessaging.register()`;
-- registration error handling;
-- `AcklineTheme`.
-
-Replace direct `SetupScreen` hosting with a root `AcklineApp`.
-
-Do not move FID setup code merely for style.
-
-Do not create multiple activities.
-
----
-
-## 20. Root App UI
-
-Expected path: `app/src/main/java/com/edu/ackline/ui/AcklineApp.kt`
-
-Responsibilities:
-
-- host Inbox;
-- host Detail;
-- host Setup;
-- maintain small screen state/back behavior.
-
-No Navigation Compose by default.
-
-A small screen model such as `Inbox`, `Detail(notificationId)`, and `Setup` is enough.
-
-Back behavior:
-
-- Detail → Inbox
-- Setup → Inbox
-
-Process death may return to Inbox.
-
-Restoring the full navigation stack across process death is not required.
-
----
-
-## 21. Inbox ViewModel
-
-Expected path: `app/src/main/java/com/edu/ackline/feature/inbox/InboxViewModel.kt`
-
-Responsibilities:
-
-- observe pending flow;
-- observe viewed flow;
-- expose immutable UI state;
-- hold selected `Pendientes / Vistas` filter if useful.
-
-Use lifecycle-aware state collection in Compose.
-
-Do not expose DAO directly to composables.
-
-Do not add use cases/interactors.
-
-A manual ViewModel factory is acceptable.
-
----
-
-## 22. Inbox Screen
-
-Expected path: `app/src/main/java/com/edu/ackline/feature/inbox/InboxScreen.kt`
-
-Keep small composables in this file unless separation materially improves clarity.
-
-Required visual structure:
-
-- small source/eyebrow label;
-- `Inbox`;
-- pending count;
-- `Pendientes | Vistas`;
-- alert rows.
-
-Row content:
-
-- severity cue;
-- title;
-- 1–2 line summary;
-- timestamp.
-
-Row tap opens detail.
-
-No Visto action.
-
-No swipe acknowledgment.
-
-No card soup.
-
-Prefer one coherent scrolling surface.
-
----
-
-## 23. UI Direction
-
-Use Material 3 as implementation foundation, not visual identity.
-
-Preferred:
-
-- restrained typography;
-- clean hierarchy;
-- intentional whitespace;
-- flat list rows;
-- subtle dividers;
-- small severity cue;
-- limited radii;
-- limited elevation.
-
-Avoid:
-
-- gradient headers;
-- nested cards;
-- emoji;
-- large colorful chips everywhere;
-- glass;
-- generic dashboard;
-- verbose explanatory paragraphs.
-
-Suggested initial copy:
-
-- `PERSONAL ADMIN`
-- `Inbox`
-- `Pendientes`
-- `Vistas`
-
-Pending count may appear as `3 pendientes`.
-
-Do not add localization infrastructure.
-
----
-
-## 24. Severity Treatment
-
-Severity should be distinguishable without dominating rows.
-
-Reasonable approaches:
-
-- small dot;
-- thin side marker;
-- small uppercase label;
-- subtle icon.
-
-Do not default to large colored backgrounds/cards for severity.
-
-Exact treatment is a screenshot/product decision.
-
----
-
-## 25. Empty States
-
-Required conceptual empty states:
-
-Pendientes: `No hay alertas pendientes`
-
-Vistas: `Aún no hay alertas vistas`
-
-Keep secondary copy minimal.
-
-No illustration dependency is needed.
-
----
-
-## 26. Alert Detail
-
-Expected path: `app/src/main/java/com/edu/ackline/feature/detail/AlertDetailScreen.kt`
-
-Input should be app-owned `Alert`, not `AlertEntity`.
-
-Display:
+Pending state:
 
 - severity;
 - title;
 - full message;
-- created time;
-- received time if useful;
-- status.
+- timestamps;
+- `Pendiente`;
+- explicit `Marcar como visto`.
 
-Current status derives only from `acknowledgedAt`.
+Viewed state:
 
-No explicit acknowledgment button in Phase 2.
+- severity;
+- title;
+- full message;
+- timestamps;
+- `Vista`;
+- no acknowledgment button.
 
-No remote ACK state.
+When the button is tapped:
 
-No debugging panel.
+- local ACK runs;
+- Room emits updated row;
+- screen updates without navigation/reload;
+- matching tray notification disappears.
 
----
-
-## 27. Setup Navigation
-
-Existing `SetupScreen.kt` and `SetupState.kt` should remain largely unchanged.
-
-Inbox should provide a restrained way to reach Setup, for example a small top-bar device/settings action.
-
-Do not make Setup one of the Pendientes/Vistas tabs.
-
----
-
-## 28. Viewed Data During Phase 2
-
-Production flow does not set `acknowledgedAt`.
-
-Therefore Vistas will normally be empty.
-
-That is intentional.
-
-Viewed test data may exist in instrumented DAO fixtures or Compose Preview fixtures.
-
-Do not add a hidden runtime ACK button merely to populate the Vistas UI.
+The button should be visible and deliberate but consistent with the existing lightweight design.
 
 ---
 
-## 29. Tests — Protocol
+## 23. Vistas UI
 
-Update or replace the Phase 1 payload tests.
+No new screen is required.
 
-Required meaningful cases:
+Existing Vistas tab becomes functional automatically through Room.
 
-- valid protocol 1 accepted;
-- protocol missing rejected;
-- wrong protocol rejected;
-- missing notification ID rejected;
-- blank notification ID rejected;
-- invalid level rejected;
-- blank title rejected;
-- blank message rejected;
-- missing `created_at` rejected;
-- invalid `created_at` rejected;
-- valid `created_at` parsed.
+Verify that:
+
+- acknowledged rows appear;
+- chronological order remains correct;
+- row click opens Detail;
+- viewed Detail shows Vista;
+- no ACK action appears for viewed rows.
 
 ---
 
-## 30. Tests — Persistence
+## 24. Notification Action UI
 
-Prefer a small Android instrumented test using an in-memory Room database.
+Use the native notification action label:
 
-Minimum:
+`Visto`
 
-- first insert succeeds;
-- duplicate same `notificationId` is ignored;
-- one row remains;
-- pending query contains new row;
-- acknowledged fixture appears in viewed query;
-- ordering is newest first.
+Do not add multiple actions.
 
-Do not add Robolectric just to run these as JVM tests.
+Do not add reply/input.
 
-If Room testing requires one small test dependency, preflight must justify it.
+Do not change severity channel IDs.
 
----
+Do not change FCM priority.
 
-## 31. Tests — Repository
-
-If natural with the same Room fixture, verify:
-
-- envelope maps correctly;
-- duplicate insert reports duplicate;
-- Room row maps back to `Alert`.
-
-Do not create fake repository interfaces solely for testing.
+Do not require the app UI to be open.
 
 ---
 
-## 32. Tests — UI
+## 25. Notification Body Tap
 
-Compose UI tests are optional.
+Phase 3 does not need to change body-tap behavior.
 
-Add them only if they provide durable value for simple behavior such as tab selection or row click → detail.
+If body tap remains inert, that is acceptable.
 
-Do not create screenshot/pixel-test infrastructure.
+If a neutral content PendingIntent is already added or preflight chooses to add one, opening the app/detail must not acknowledge.
 
-Physical screenshot review remains mandatory.
-
----
-
-## 33. Duplicate Physical QA
-
-Use a dedicated ID such as `phase2-dedupe-001`.
-
-Procedure:
-
-1. Send once.
-2. Verify one Inbox row.
-3. Swipe tray notification away.
-4. Send identical `notification_id` again.
-5. Verify Inbox row count unchanged.
-6. Verify tray notification does not reappear.
-
-This is a key Phase 2 acceptance test.
+Do not conflate notification body tap with `Visto`.
 
 ---
 
-## 34. Persistence QA
+## 26. Duplicate Delivery After ACK
 
-Required:
+This regression is mandatory.
 
-1. receive multiple alerts;
-2. close/reopen Ackline;
-3. verify rows;
-4. kill process;
-5. reopen Ackline;
-6. verify rows;
-7. reboot Oppo;
-8. verify rows.
+Sequence:
 
-Force Stop may be used as a persistence test only when followed by manually reopening the app.
-
-It is not a Phase 2 transport reliability test.
-
----
-
-## 35. Notification-Dismissal QA
-
-Procedure:
-
-1. receive unique alert;
-2. confirm Inbox row;
-3. swipe Android notification away;
-4. open Ackline.
+1. receive unique ID;
+2. acknowledge it;
+3. verify Vista;
+4. resend the same FCM `notification_id`.
 
 Expected:
 
-- same Inbox row remains;
-- status remains Pendiente.
+- insert remains duplicate;
+- same one row;
+- no native repost;
+- `acknowledgedAt` unchanged;
+- `ackSyncState` remains pending;
+- row remains in Vistas.
 
-Tray state must never delete local state.
+Do not let incoming FCM overwrite local ACK metadata.
 
 ---
 
-## 36. False-ACK QA
+## 27. Migration Test Dependency
 
-Phase 2 must prove ordinary observation does not modify `acknowledgedAt`.
+Add only if required for the chosen official Room migration-test approach:
+
+`androidx.room:room-testing:2.8.4`
+
+as:
+
+`androidTestImplementation`
+
+No new runtime dependency should be necessary.
+
+Do not add Robolectric.
+
+---
+
+## 28. Migration Instrumented Test
+
+Expected new/extended test:
+
+`AcklineMigrationTest`
+
+Use Room's migration test tooling or the smallest official equivalent.
+
+Test v1 → v2 against the exported schema.
+
+Insert a realistic v1 row.
+
+After migration verify:
+
+- row exists;
+- notification ID unchanged;
+- title/message/timestamps unchanged;
+- acknowledgedAt remains null;
+- `ackSyncState = none`;
+- schema validates.
+
+Keep schema v1 and schema v2 checked in.
+
+---
+
+## 29. DAO / Repository ACK Tests
+
+Extend instrumented coverage.
+
+Required:
+
+### First acknowledgment
+
+pending row  
+→ update count 1  
+→ acknowledged timestamp equals requested timestamp  
+→ sync state pending  
+→ pending query excludes row  
+→ viewed query includes row.
+
+### Second acknowledgment
+
+same ID with later timestamp  
+→ update count 0  
+→ original timestamp preserved.
+
+### Unknown ID
+
+→ update count 0  
+→ no row created.
+
+### Duplicate receive after ACK
+
+→ insert conflict ignored  
+→ ACK state remains intact.
+
+---
+
+## 30. Receiver / Notification Tests
+
+Do not create a large Android testing framework solely to unit-test the receiver.
+
+At minimum code review must verify:
+
+- private receiver;
+- action validation;
+- `goAsync()`;
+- background executor;
+- `finish()` in `finally`;
+- shared manager use;
+- immutable unique PendingIntent.
+
+Physical Oppo QA is the authoritative notification-action test.
+
+---
+
+## 31. False-ACK Physical Matrix
+
+Use a fresh unique alert for each ambiguous case where useful.
 
 Verify:
 
-- receive → pending;
-- open app → pending;
-- open detail → pending;
-- swipe notification → pending;
-- restart app → pending.
+- FCM receive → Pendiente;
+- tray display → Pendiente;
+- tray body tap if supported → Pendiente;
+- tray swipe → Pendiente;
+- launch Ackline → Pendiente;
+- open Detail → Pendiente;
+- return from Detail → Pendiente;
+- app restart → Pendiente.
 
-Do not add true-ACK actions yet.
+No hidden state transition is acceptable.
 
 ---
 
-## 37. FCM Regression Smoke
+## 32. Inbox True-ACK QA
 
-After Room integration, repeat only:
+Receive a unique pending alert.
 
-- Background + Wi-Fi + IMPORTANT
-- Removed from Recents + IMPORTANT
+Tap row-level:
 
-Expected for each:
+`Visto`
 
-- persisted in Room;
+Expected:
+
+- pending count decrements;
+- row disappears from Pendientes;
+- row appears in Vistas;
+- corresponding tray notification disappears;
+- Detail subsequently shows Vista;
+- state persists after app restart.
+
+---
+
+## 33. Detail True-ACK QA
+
+Receive another unique alert.
+
+Open Detail.
+
+Confirm still Pendiente.
+
+Tap:
+
+`Marcar como visto`
+
+Expected:
+
+- Detail changes live to Vista;
+- button disappears;
+- tray item disappears;
+- Inbox Vistas contains row;
+- Pendientes no longer contains it.
+
+---
+
+## 34. Notification True-ACK QA
+
+Receive another unique alert.
+
+Do not open Ackline.
+
+Tap notification action:
+
+`Visto`
+
+Expected:
+
+- notification disappears;
+- opening Ackline later shows the alert under Vistas;
+- state is durable.
+
+Repeat with Ackline removed from Recents before tapping the action.
+
+This is a core Phase 3 Android gate.
+
+---
+
+## 35. Idempotent ACK QA
+
+Acknowledge a unique alert.
+
+Attempt to acknowledge it a second time if a stale/alternate surface remains available.
+
+Expected:
+
+- no crash;
+- still one row;
+- original `acknowledgedAt` unchanged;
+- still Vistas;
+- sync state remains pending.
+
+---
+
+## 36. Persistence QA
+
+After several alerts are acknowledged through different surfaces:
+
+- close/reopen;
+- force stop + manual reopen;
+- reboot.
+
+Expected:
+
+- viewed alerts stay viewed;
+- pending alerts stay pending;
+- timestamps remain;
+- pending count remains correct.
+
+Force Stop here tests persistence only, not FCM delivery while force-stopped.
+
+---
+
+## 37. FCM Regression QA
+
+Do a focused regression:
+
+1. Background + IMPORTANT
+2. Removed from Recents + IMPORTANT
+
+For each:
+
+- new alert persists;
 - native notification appears;
-- no manual app reopen required.
+- alert starts pending.
 
-Do not rerun the full Phase 1 matrix unless actual regression evidence requires it.
+Do not rerun the full Phase 1 matrix unless evidence requires it.
 
 ---
 
 ## 38. Screenshot Review
 
-Before final closeout, collect Oppo screenshots for:
+Collect Oppo screenshots for:
 
-- Inbox with several pending alerts;
-- Inbox empty state;
-- Vistas empty state;
-- Alert Detail;
-- dark-mode Inbox;
-- dark-mode Detail.
+- Inbox with mixed pending/viewed data;
+- Pendientes with row-level Visto action;
+- Vistas;
+- Detail pending;
+- Detail viewed;
+- native notification with Visto action;
+- light-mode Inbox/Detail;
+- dark-mode Inbox/Detail.
 
-Review criteria:
+Review:
 
+- action prominence;
+- accidental-tap risk;
 - hierarchy;
-- density;
-- severity treatment;
-- spacing;
-- typography;
-- generic CRUD feel;
-- dark-mode quality.
-
-If product quality is insufficient, fix UI before closing Phase 2.
+- row density;
+- tab behavior;
+- viewed-state clarity;
+- Detail CTA quality;
+- no sync-diagnostic clutter.
 
 ---
 
-## 39. Expected File Scope
+## 39. Expected Files to Modify
 
-Likely modified:
+Likely:
 
-- `gradle/libs.versions.toml`
-- `app/build.gradle.kts`
+- `gradle/libs.versions.toml` — only if room-testing alias is needed
+- `app/build.gradle.kts` — only if room-testing dependency is needed
 - `app/src/main/AndroidManifest.xml`
-- `app/src/main/java/com/edu/ackline/MainActivity.kt`
-- `app/src/main/java/com/edu/ackline/push/AcklineMessagingService.kt`
-- `app/src/main/java/com/edu/ackline/notifications/AcklineNotificationManager.kt`
-- `tools/firebase_sender.py`
-- existing payload tests
-
-Likely created:
-
 - `app/src/main/java/com/edu/ackline/AcklineApplication.kt`
 - `app/src/main/java/com/edu/ackline/model/Alert.kt`
-- `app/src/main/java/com/edu/ackline/push/IncomingAlertEnvelope.kt`
 - `app/src/main/java/com/edu/ackline/data/local/AlertEntity.kt`
 - `app/src/main/java/com/edu/ackline/data/local/AlertDao.kt`
 - `app/src/main/java/com/edu/ackline/data/local/AcklineDatabase.kt`
 - `app/src/main/java/com/edu/ackline/data/AlertRepository.kt`
-- `app/src/main/java/com/edu/ackline/ui/AcklineApp.kt`
+- `app/src/main/java/com/edu/ackline/notifications/AcklineNotificationManager.kt`
 - `app/src/main/java/com/edu/ackline/feature/inbox/InboxViewModel.kt`
 - `app/src/main/java/com/edu/ackline/feature/inbox/InboxScreen.kt`
 - `app/src/main/java/com/edu/ackline/feature/detail/AlertDetailScreen.kt`
+- `app/src/main/java/com/edu/ackline/ui/AcklineApp.kt`
+- existing Room instrumented tests
 
-Potential test:
+Potential schema output:
 
-- `app/src/androidTest/.../AlertDaoInstrumentedTest.kt`
+- `app/schemas/com.edu.ackline.data.local.AcklineDatabase/2.json`
 
-Preflight must confirm exact paths before implementation.
-
-Do not mechanically create every listed file if responsibilities combine cleanly.
+Preflight confirms exact scope before implementation.
 
 ---
 
-## 40. Preserve Unless Required
+## 40. Expected Files to Create
 
-Do not redesign unless necessary:
+Likely:
 
+- `app/src/main/java/com/edu/ackline/model/AckSyncState.kt` if not colocated
+- `app/src/main/java/com/edu/ackline/ack/LocalAcknowledgmentManager.kt`
+- `app/src/main/java/com/edu/ackline/ack/AcknowledgeReceiver.kt`
+- `app/src/main/java/com/edu/ackline/feature/detail/AlertDetailViewModel.kt`
+- `app/src/androidTest/java/com/edu/ackline/data/local/AcklineMigrationTest.kt`
+
+Do not create unrelated future-phase classes.
+
+---
+
+## 41. Files Expected Not to Need Changes
+
+Normally preserve:
+
+- `push/IncomingAlertEnvelope.kt`
+- `push/AcklineMessagingService.kt` except a tiny mapping adjustment if the entity/repository signature requires it
 - `SetupState.kt`
-- `SetupScreen.kt`
-- `Theme.kt`
-- Firebase project configuration
+- `feature/setup/SetupScreen.kt`
+- theme files
+- `tools/firebase_sender.py`
+- Firebase project config
 - `google-services.json`
 
-No new Firebase Console products are required.
+Do not change FCM protocol merely because the phase changes local state.
 
 ---
 
-## 41. Explicit Out of Scope
+## 42. Explicit Out of Scope
 
 Do not implement:
 
-- `acknowledge(notificationId)`;
-- `Marcar como visto`;
-- notification Visto action;
-- ACK sync state;
-- WorkManager;
+- remote ACK request;
 - HTTP client;
-- Tailscale;
+- Tailscale logic;
 - Hermes ACK endpoint;
+- WorkManager;
+- retry/backoff;
+- remote SYNCED/ERROR behavior;
+- ACK auth;
 - E2EE;
 - crypto;
 - Keystore;
-- real Hermes data;
-- production Hermes sender integration;
+- Hermes production sender integration;
 - reconciliation;
 - `onDeletedMessages()` sync;
 - search;
-- advanced settings;
 - analytics;
-- accounts;
-- multi-user;
-- multi-device;
-- Play Store;
-- billing;
+- auth/accounts;
+- multi-user/device;
+- Navigation Compose;
+- Hilt/Koin;
+- Retrofit;
+- multi-module;
 - foreground service;
 - custom socket;
 - MQTT;
 - ntfy;
-- battery exemptions;
-- ColorOS hacks;
-- Hilt;
-- Retrofit;
-- multi-module architecture;
-- generic Clean Architecture;
-- use-case/interactor layer.
+- battery exemption;
+- ColorOS workaround.
 
 ---
 
-## 42. Automated Validation
+## 43. Automated Validation
 
 Required:
 
@@ -980,129 +996,148 @@ git status --short --untracked-files=all
 git diff --stat
 ```
 
-If instrumented Room tests are added:
+Required instrumented gate:
 
 ```bash
 ./gradlew connectedDebugAndroidTest
 ```
 
-Use the physical Oppo if ADB is healthy.
-
-Wireless-ADB problems are tooling/environment issues, not reasons to change Ackline source.
+Do not skip the migration test.
 
 ---
 
-## 43. Manual QA Order
+## 44. Implementation Order
 
-After automated validation:
-
-A. install current APK  
-B. launch Inbox  
-C. unique alert persistence  
-D. duplicate idempotency  
-E. tray-dismissal persistence  
-F. app/process restart persistence  
-G. Alert Detail  
-H. false-ACK checks  
-I. Pendientes/Vistas  
-J. Setup accessibility  
-K. background FCM regression smoke  
-L. reboot persistence  
-M. screenshots light/dark.
-
-Stop at the first genuine correctness blocker.
-
----
-
-## 44. Review Route
-
-After implementation:
-
-automated validation → physical data/persistence QA → screenshot/product review with ChatGPT → `/local-review` → fix blockers → repeat affected validation → user commit/push → ChatGPT GitHub final review.
-
-For Room/KSP/platform blocker: `Gemini Android Studio`.
-
-For UI that remains generic after one focused pass: use the premium UI route in `docs/AI_WORKFLOW.md`.
+1. Confirm exact current v1 schema and migration-test requirements.
+2. Add `AckSyncState`.
+3. Add `ackSyncState` to entity/model mapping.
+4. Implement `MIGRATION_1_2`.
+5. Register migration and generate schema v2.
+6. Add guarded DAO acknowledgment update.
+7. Add repository acknowledgment result.
+8. Add shared `LocalAcknowledgmentManager`.
+9. Add notification cancellation API.
+10. Add private `AcknowledgeReceiver`.
+11. Add notification `Visto` PendingIntent/action.
+12. Wire manager/executor in `AcklineApplication`.
+13. Extend `InboxViewModel`.
+14. Add compact Inbox Visto action.
+15. Replace snapshot Detail navigation with notification ID.
+16. Add `AlertDetailViewModel`.
+17. Add Detail `Marcar como visto`.
+18. Add/extend migration and DAO acknowledgment tests.
+19. Run automated validation.
+20. Run connected instrumented tests.
+21. Independent review.
+22. Install upgrade over existing Phase 2 app/data.
+23. Physical false/true ACK QA.
+24. Screenshot/product review.
+25. Commit/push only after PASS.
 
 ---
 
-## 45. Stop Policy
+## 45. Android Upgrade Rule
 
-At the first real failure:
+Do not uninstall Ackline before migration QA.
+
+Install the Phase 3 build over the existing Phase 2 installation.
+
+Reason:
+
+the real user database must exercise:
+
+v1 → v2.
+
+If the app is uninstalled or data is cleared before the migration gate, that test is invalid and must be repeated from a real v1 database.
+
+---
+
+## 46. Stop Policy
+
+At first real failure:
 
 1. stop;
-2. identify root cause;
-3. make one focused fix;
-4. rerun the smallest relevant check.
+2. identify the root cause;
+3. make one bounded evidence-based fix;
+4. rerun the smallest relevant test.
 
 Maximum two failed attempts on the same blocker.
 
-Do not enter autonomous repair loops.
+Escalate concrete:
 
-Do not refactor unrelated Phase 1 code while debugging Room/UI.
+- Room migration issue;
+- PendingIntent/action issue;
+- BroadcastReceiver lifecycle issue
+
+to the Android specialist route rather than inventing a workaround.
 
 ---
 
-## 46. Final Builder Report
+## 47. Builder Final Report
 
-Builder must return:
+Return:
 
-- RESULT: `SUCCESS` or `BLOCKED`;
-- files created;
-- files modified;
-- dependency changes;
-- database schema;
-- protocol changes;
-- receive/persist/notify behavior;
-- dedupe behavior;
-- tests;
-- validation results;
-- instrumented-test result;
-- manual QA still required;
-- security/privacy check;
-- scope check;
-- remaining risks.
+- RESULT: SUCCESS | BLOCKED
+- files created
+- files modified
+- exact database v2 schema
+- migration details
+- exported schema result
+- acknowledgment transaction behavior
+- notification receiver behavior
+- PendingIntent uniqueness strategy
+- Inbox acknowledgment behavior
+- Detail live-state behavior
+- tests
+- validation results
+- connectedAndroidTest result
+- manual QA still required
+- scope check
+- security/privacy check
+- remaining risks
 
 Explicitly confirm:
 
-- no ACK implementation;
+- no remote HTTP ACK;
 - no WorkManager;
 - no E2EE;
-- no real personal data;
-- no Hilt;
-- no Retrofit;
-- no multi-module;
-- no destructive migration fallback;
-- explicit `allowBackup` policy.
+- no destructive migration;
+- no implicit ACK path;
+- no Phase 4 implementation.
 
 ---
 
-## 47. Completion Gate
+## 48. Completion Gate
 
-Phase 2 is ready for final GitHub review only after:
+Phase 3 is ready for final GitHub review only after:
 
-- build PASS;
-- lint PASS;
-- unit tests PASS;
-- Room persistence test PASS;
-- duplicate QA PASS;
+- v1 → v2 migration PASS;
+- existing Phase 2 data preserved;
+- schema v2 checked in;
+- DAO ACK test PASS;
+- first ACK writes timestamp + pending sync state;
+- second ACK preserves original timestamp;
+- unknown ACK does not create data;
+- notification action PASS;
+- Inbox Visto PASS;
+- Detail Marcar como visto PASS;
+- Room-backed live UI PASS;
+- false-ACK matrix PASS;
+- duplicate-after-ACK PASS;
 - restart persistence PASS;
 - reboot persistence PASS;
-- tray dismissal PASS;
-- false-ACK PASS;
-- background FCM regression PASS;
-- Inbox screenshot review PASS;
-- Detail screenshot review PASS;
-- dark-mode review PASS;
+- FCM regression PASS;
+- light screenshot review PASS;
+- dark screenshot review PASS;
 - independent review PASS;
-- scope review PASS;
-- security/privacy review PASS.
+- no Phase 4 scope creep;
+- final pushed-branch GitHub review = PASS.
 
 ---
 
-## 48. Suggested Commit
+## 49. Suggested Commit
 
-`feat: add persistent alert inbox`
+`feat: add explicit local acknowledgment`
 
 Do not commit automatically.
 

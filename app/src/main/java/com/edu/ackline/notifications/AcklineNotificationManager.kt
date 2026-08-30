@@ -4,18 +4,24 @@ import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.edu.ackline.MainActivity
+import com.edu.ackline.ack.AcknowledgeReceiver
 import com.edu.ackline.model.AlertLevel
 
 /**
  * Small Phase 1 boundary for creating native Android notifications.
  *
- * It intentionally does not persist alerts, deduplicate deliveries, or attach
- * actions. Those behaviors belong to later phases.
+ * It intentionally does not persist alerts or deduplicate deliveries. Those
+ * behaviors belong to the repository and Room layers.
  */
 object AcklineNotificationManager {
 
@@ -95,7 +101,15 @@ object AcklineNotificationManager {
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
+            .setContentIntent(contentPendingIntent(appContext, notificationId))
             .setAutoCancel(true)
+            .addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(appContext, android.R.drawable.ic_menu_view),
+                    "Visto",
+                    acknowledgePendingIntent(appContext, notificationId),
+                ).build(),
+            )
             .build()
 
         return try {
@@ -129,6 +143,51 @@ object AcklineNotificationManager {
                 message = message,
             )
         } ?: false
+
+    fun cancel(context: Context, notificationId: String) {
+        context.applicationContext
+            .getSystemService(NotificationManager::class.java)
+            ?.cancel(notificationId.hashCode())
+    }
+
+    private fun acknowledgePendingIntent(
+        context: Context,
+        notificationId: String,
+    ): PendingIntent {
+        val intent = Intent(context, AcknowledgeReceiver::class.java).apply {
+            action = AcknowledgeReceiver.ACTION_ACKNOWLEDGE
+            putExtra(AcknowledgeReceiver.EXTRA_NOTIFICATION_ID, notificationId)
+            data = Uri.Builder()
+                .scheme("ackline")
+                .authority("acknowledge")
+                .appendPath(notificationId)
+                .build()
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            notificationId.hashCode(),
+            intent,
+            pendingIntentFlags(),
+        )
+    }
+
+    private fun contentPendingIntent(
+        context: Context,
+        notificationId: String,
+    ): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            notificationId.hashCode(),
+            intent,
+            pendingIntentFlags(),
+        )
+    }
+
+    private fun pendingIntentFlags(): Int =
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 
     private fun canPostNotifications(
         context: Context,

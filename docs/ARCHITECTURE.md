@@ -1,126 +1,228 @@
-# Ackline — Architecture
+# Ackline Architecture — Phase 6 Active View
 
-## 1. Architecture Goal
+## 1. Principle
 
-Ackline remains a small single-module Android client.
+Ackline remains a small Android notification inbox.
 
-Reliability, explicit state, privacy, and low maintenance matter more than framework sophistication.
+Hermes remains the Personal Admin brain and server-side notification source of truth.
 
-Phase 5 adds one security boundary around the already-proven inbound FCM payload.
-
----
-
-## 2. Source-of-Truth Rules
-
-1. Hermes notification state remains authoritative server-side.
-2. Room remains authoritative for device Inbox/local ACK/sync state.
-3. FCM remains transport only.
-4. Android tray remains presentation only.
-5. WorkManager remains ACK deferred execution only.
-6. AndroidKeyStore becomes authoritative for the device-side payload-decryption key reference.
-7. The Mac secrets file is authoritative for sender-side shared payload-encryption key material.
-8. `kid` is routing/version metadata, not secret material.
-9. Failed authentication never becomes an Alert.
-10. Decryption must complete before any private alert field reaches normal app layers.
-
----
-
-## 3. Runtime After Phase 5
+Phase 6 changes **only the production outbound transport from Hermes**.
 
 ```text
-Hermes / development sender
-        │
-        │ plaintext inner alert exists only locally
-        ▼
-   AES-256-GCM encrypt
-        │
-        ▼
-FCM data envelope:
-v / kid / nonce / ciphertext
-        │
-        ▼
-FirebaseMessagingService
-        │
-        ▼
-EncryptedPushEnvelope
-        │
-        ▼
-PayloadCrypto
-        │
- AndroidKeyStore SecretKey
-        │
-        ▼
-authenticated plaintext
-        │
-        ▼
-InnerPayloadDecoder
-        │
-        ▼
-existing parseAcklinePayload()
-        │
-        ▼
-IncomingAlertEnvelope
-        │
-        ▼
-AlertRepository
-        │
-        ▼
-Room
-  ┌─────┴───────────────┐
-  ▼                     ▼
-Inbox/Detail      native notification
-  │                     │
-  └──── explicit Visto ─┘
-             │
-             ▼
- existing Phase 4 ACK sync
+Hermes decides
+Hermes queues
+Hermes encrypts
+FCM transports
+Ackline receives
+Ackline persists
+User acknowledges
+Hermes records ACK
 ```
 
 ---
 
-## 4. Privacy Boundary
+## 2. Boundaries
 
-Before successful AES-GCM authentication, private alert fields must not enter:
+### Hermes owns
 
-- Room;
-- native notifications;
-- Inbox;
-- logs;
-- ACK sync.
+- Gmail/Calendar/Tasks ingestion;
+- detection/business rules;
+- LLM judgment;
+- notification decision;
+- persistent outbox;
+- `notification_id`;
+- `ack_token`;
+- `level/title/message/created_at`;
+- production FCM sending;
+- server acknowledgment state.
 
-After successful authentication, the existing application flow resumes.
+### FCM owns only
+
+- transport routing;
+- provider acceptance;
+- device wake/delivery behavior.
+
+FCM is not:
+- source of truth;
+- inbox DB;
+- ACK DB;
+- reconciliation DB.
+
+### Ackline owns
+
+- FCM receive boundary;
+- authenticated E2EE decrypt;
+- Room persistence;
+- native notification presentation;
+- explicit local `Visto`;
+- durable remote ACK scheduling.
+
+Ackline does not own Personal Admin decision logic.
 
 ---
 
-## 5. FCM Envelope v1
-
-Only these four data keys:
+## 3. Production Notification Flow
 
 ```text
-v
-kid
-nonce
-ciphertext
+Hermes event/change
+        │
+        ▼
+Personal Admin judgment
+        │
+        ▼
+notification_state.py queue
+        │
+        ▼
+Hermes SQLite notifications row
+        │
+        │ stable:
+        │ notification_id
+        │ ack_token
+        │ created_at
+        │ level/title/message
+        ▼
+Phase 6 dispatcher
+        │
+        ▼
+FCM sender
+        │
+        ├── read configured FID
+        ├── read AES key
+        ├── load Firebase credential
+        ├── compact inner JSON
+        ├── AES-256-GCM
+        └── FCM send
+        │
+        ▼
+FCM accepted?
+   ┌────┴────┐
+   no        yes
+   │          │
+   ▼          ▼
+retain      record
+unsent      sent_at
+state
+   │
+retry later
 ```
+
+Then:
+
+```text
+FCM
+→ Ackline FirebaseMessagingService
+→ exact encrypted envelope validation
+→ AndroidKeyStore key
+→ AES-GCM auth/decrypt
+→ strict UTF-8/string JSON
+→ existing parseAcklinePayload
+→ Room INSERT IGNORE
+→ native notification
+```
+
+---
+
+## 4. ACK Flow Is Independent
+
+Phase 6 does not change ACK topology:
+
+```text
+User presses Visto
+→ Room local ACK immediately
+→ WorkManager
+→ HTTPS/Tailscale
+→ Hermes ack_server.py
+→ Hermes acknowledged_at
+→ Ackline SYNCED
+```
+
+Important:
+
+```text
+FCM delivery does NOT use Tailscale
+ACK does
+```
+
+Tailscale outage must not block push reception.
+
+---
+
+## 5. Durable Outbox Semantics
+
+Hermes SQLite remains the authoritative outbox.
+
+Preferred transport boundary:
+
+```text
+notification row
+→ one transport attempt
+→ sanitized typed result
+```
+
+Dispatcher owns DB persistence.
+
+Sender owns one FCM attempt.
+
+Conceptual result categories:
+
+```text
+Accepted
+TransientFailure(category)
+PermanentFailure(category)
+```
+
+Exact Python shape is a preflight decision. Do not create an unnecessary transport framework.
+
+---
+
+## 6. Acceptance vs Delivery
+
+FCM provider acceptance and end-device delivery are different.
+
+Phase 6 may record:
+
+```text
+sent_at = provider accepted
+```
+
+only if that matches the existing Hermes contract after preflight verification.
+
+It must never claim:
+
+```text
+device displayed alert
+```
+
+Phase 7 reconciliation exists because realtime push can rarely be missed.
+
+---
+
+## 7. At-Least-Once Model
+
+Duplicate transport attempts are intentionally safe.
 
 Example:
 
-```json
-{
-  "v": "1",
-  "kid": "ackline-main",
-  "nonce": "base64url",
-  "ciphertext": "base64url"
-}
+```text
+attempt A
+→ FCM accepts
+→ Hermes fails before sent_at commit
+
+attempt B
+→ same notification_id
+→ fresh nonce
+→ FCM accepts again
 ```
 
-FCM does not need the decrypted `notification_id`.
+Ackline's `notification_id` dedupe produces one logical row and no duplicate notification repost.
+
+Do not pursue exactly-once transport.
 
 ---
 
-## 6. Encrypted Inner Protocol
+## 8. E2EE Boundary
 
-Existing logical payload is encrypted as UTF-8 JSON:
+Private inner payload:
 
 ```text
 protocol
@@ -129,471 +231,199 @@ level
 title
 message
 created_at
-ack_token?
+ack_token
 ```
 
-Encryption-envelope version and inner-alert protocol version are separate.
+is encrypted before leaving the Mac.
 
----
-
-## 7. AES-GCM Parameters
+FCM-visible data:
 
 ```text
-algorithm: AES
-key size: 256 bits
-mode: GCM
-padding: none
-nonce: 96 bits
-tag: 128 bits
-```
-
-Android:
-
-```text
-AES/GCM/NoPadding
-```
-
-Python:
-
-```text
-cryptography AESGCM
-```
-
-No tag truncation.
-
----
-
-## 8. Nonce Rule
-
-Generate a fresh cryptographically random 12-byte nonce for every encryption.
-
-Nonce is public and carried in the envelope.
-
-Nonce reuse with the same key is forbidden.
-
----
-
-## 9. AAD Rule
-
-Canonical:
-
-```text
-ackline-e2ee|v=1|kid=<kid>
-```
-
-UTF-8 bytes.
-
-AAD binds envelope version and key identifier.
-
-Changing either causes authentication failure.
-
----
-
-## 10. Base64URL Rule
-
-Nonce and ciphertext use URL-safe Base64 without padding.
-
-Transport parser validates and bounds decoded size.
-
----
-
-## 11. Key Identifier Rule
-
-`kid` is validated, bounded, exact-match metadata.
-
-Planning form:
-
-```text
-[A-Za-z0-9._-]{1,64}
-```
-
-Unknown `kid` is rejected.
-
-Never try every key or silently fall back.
-
----
-
-## 12. Mac Key Storage
-
-One 32-byte random shared key:
-
-```text
-~/.hermes/secrets/hermes-notify.key
-```
-
-Mode:
-
-```text
-0600
-```
-
-Key bytes are never committed or logged.
-
-Phase 6 may later centralize device metadata, but Phase 5 does not build multi-device management.
-
----
-
-## 13. Android Key Storage
-
-The same AES key is imported into AndroidKeyStore.
-
-Keystore alias derives from expected `kid`.
-
-The app obtains a `SecretKey` reference for decryption.
-
-Raw bytes are needed only during import and discarded afterward.
-
----
-
-## 14. Keystore Authorization
-
-Least-privilege target:
-
-```text
-PURPOSE_DECRYPT
-GCM
-NoPadding
-```
-
-Do not require per-use biometric authentication because background FCM decryption must work while locked.
-
-StrongBox is not an MVP requirement.
-
----
-
-## 15. Provisioning Boundary
-
-Preferred:
-
-```text
-Mac secret file
-→ USB/ADB stdin
-→ app-private temporary file
-→ AndroidKeyStore import
-→ temporary file deletion
-```
-
-Provisioning is local deployment, not runtime transport.
-
-No cloud key exchange.
-
-No key in FCM.
-
----
-
-## 16. Setup Diagnostics
-
-Setup may expose encryption readiness and optional non-secret `kid`.
-
-Never expose or copy key bytes.
-
----
-
-## 17. EncryptedPushEnvelope
-
-App-owned model independent of Firebase classes.
-
-Conceptual fields:
-
-```text
-version
+v
 kid
 nonce
 ciphertext
 ```
 
-Firebase service maps `RemoteMessage.data` into it.
+only.
 
----
-
-## 18. PayloadCrypto
-
-Security-layer component.
-
-Input: `EncryptedPushEnvelope`.
-
-Output: authenticated plaintext bytes or safe failure.
-
-No Room, network, notifications, or ACK responsibilities.
-
----
-
-## 19. InnerPayloadDecoder
-
-Input:
+Frozen Phase 5 protocol:
 
 ```text
-authenticated UTF-8 plaintext JSON
+v = 1
+kid = ackline-main
+AES-256-GCM
+nonce = 12 random bytes
+tag = 16 bytes
+AAD = ackline-e2ee|v=1|kid=ackline-main
+max inner = 2500 UTF-8 bytes
 ```
 
-Output:
+No Phase 6 protocol change is expected.
+
+---
+
+## 9. Key Ownership
+
+Same symmetric key:
 
 ```text
-Map<String, String>
-```
-
-Then call existing `parseAcklinePayload()`.
-
-Do not maintain two independent alert validators.
-
----
-
-## 20. FirebaseMessagingService
-
-Phase 5:
-
-```text
-RemoteMessage.data
-→ encrypted envelope only
-→ decrypt
-→ existing parser
-→ persist
-→ notify
-```
-
-Legacy plaintext top-level alert fields are not accepted.
-
----
-
-## 21. Failure Semantics
-
-Fail closed for:
-
-```text
-malformed envelope
-unsupported version
-unknown kid
-missing key
-malformed Base64URL
-invalid nonce length
-GCM auth failure
-invalid UTF-8/JSON
-invalid inner protocol
-```
-
-No Alert is created.
-
-Expected failures should not dump sensitive stack traces.
-
----
-
-## 22. Local Persistence
-
-Phase 5 does not encrypt Room.
-
-After successful decryption, Room stores alert plaintext as before.
-
-This is intentional MVP scope.
-
-Database version remains expected at v3.
-
----
-
-## 23. ACK Token Boundary
-
-Before:
-
-```text
-FCM plaintext ack_token
-→ Room storage-only
-```
-
-After:
-
-```text
-encrypted inner ack_token
-→ authenticated decrypt
-→ Room storage-only
-```
-
-It still never enters `Alert`/Compose.
-
----
-
-## 24. ACK Transport Boundary
-
-Unchanged:
-
-```text
-Room PENDING
-→ WorkManager
-→ HTTPS/Tailscale
-→ POST /ack/<notification_id>
-→ X-Ack-Token
-→ Hermes
-```
-
-E2EE is inbound FCM protection, not ACK redesign.
-
----
-
-## 25. Sender Architecture
-
-Development sender:
-
-```text
-build inner alert
-→ compact JSON
-→ PayloadCrypto.encrypt
-→ encrypted data map
-→ Firebase Admin SDK
-```
-
-Level remains locally available to choose FCM priority but is not a plaintext FCM data field.
-
----
-
-## 26. Metadata Leakage
-
-E2EE does not hide:
-
-- timing;
-- destination;
-- message size;
-- FCM priority;
-- envelope version;
-- `kid`.
-
-Do not claim traffic-analysis resistance.
-
----
-
-## 27. Payload Size Boundary
-
-Encryption adds GCM tag, nonce field, and Base64 expansion.
-
-Sender enforces a conservative inner JSON limit.
-
-Android bounds ciphertext size before decryption.
-
----
-
-## 28. Cross-Language Compatibility
-
-Python encryption and Android/JCA decryption are one protocol.
-
-A deterministic test vector is mandatory to catch disagreement around:
-
-- Base64URL;
-- AAD;
-- tag placement;
-- nonce size;
-- plaintext bytes.
-
----
-
-## 29. Key Rotation Future-Proofing
-
-Phase 5 has one active key.
-
-`kid` allows future new-key rotation without changing envelope v1.
-
-Do not implement rotation service now.
-
----
-
-## 30. Plaintext Downgrade Resistance
-
-Once Phase 5 is enabled, sending the old plaintext FCM map cannot bypass encryption.
-
-Receive boundary accepts encrypted envelope v1 only.
-
----
-
-## 31. No User Authentication Gate
-
-Do not configure key use to require unlock/biometric per message.
-
-That would break screen-off/background delivery and Phase 1 reliability guarantees.
-
----
-
-## 32. Logs
-
-Never log:
-
-```text
-key
-ack token
-plaintext JSON
-title
-message
-ciphertext
-FID
-service-account contents
-```
-
-Use only bounded sanitized reason categories.
-
----
-
-## 33. Dependencies
+Mac:
+~/.hermes/secrets/hermes-notify.key
 
 Android:
-
-platform cryptography + AndroidKeyStore.
-
-Python:
-
-`cryptography` AESGCM.
-
-No broad security framework is used; platform cryptography and AndroidKeyStore are sufficient.
-
----
-
-## 34. Testing Layers
-
-Pure unit:
-- encoding;
-- AAD;
-- envelope parser;
-- JSON;
-- sender outer privacy.
-
-Cross-language:
-- Python encrypt;
-- Android/JCA decrypt.
-
-Instrumented:
-- actual AndroidKeyStore import/decrypt/non-exportability.
-
-Physical:
-- provisioning;
-- background encrypted delivery;
-- tamper rejection;
-- wrong-key rejection;
-- plaintext rejection;
-- Phase 4 ACK regression.
-
----
-
-## 35. Future Phase Boundaries
-
-Phase 6:
-
-```text
-Hermes persistent outbox
-→ production encrypted FCM sender
+AndroidKeyStore alias
+ackline.payload.ackline-main
 ```
 
-Phase 7:
+Mac raw key stays outside repo.
 
-```text
-recovery/reconciliation
-```
+Android raw staging is already deleted after import.
 
-Do not move those responsibilities into Phase 5.
+Phase 6 only reads the Mac key for encryption.
+
+No key rotation in this phase.
 
 ---
 
-## 36. Architecture Acceptance
+## 10. Firebase Credential Boundary
 
-Phase 5 architecture is accepted when:
+Firebase service-account credential is Mac-side only.
 
-- FCM-visible alert data is encrypted-only;
-- raw shared key exists only in approved Mac secret storage and transient Android import memory/file;
-- Android runtime key lives in AndroidKeyStore;
-- AES-GCM authentication gates the existing parser;
-- no plaintext downgrade exists;
-- existing Room/ACK architecture remains unchanged;
-- no unnecessary crypto/framework architecture is introduced.
+It must never:
+- enter Android;
+- enter FCM payload;
+- enter git;
+- enter prompts;
+- appear in diagnostics.
+
+Unattended Hermes must load it without interactive-shell dependence.
+
+The production path is
+`~/.hermes/secrets/firebase-service-account.json`, loaded explicitly by the
+Hermes-owned sender.
+
+---
+
+## 11. FID Boundary
+
+FID identifies the current Ackline installation target.
+
+Properties:
+- changes after reinstall;
+- stale FID may become unregistered;
+- not a cryptographic secret;
+- not hardcoded;
+- not routinely logged in full.
+
+Phase 6 uses `~/.hermes/secrets/ackline-fid` as its one durable local
+configuration source. The implementation does not populate the file.
+
+Phase 7 can later improve re-pair/recovery behavior.
+
+---
+
+## 12. ntfy During Migration
+
+ntfy remains temporary rollback.
+
+Target:
+
+```text
+persistent outbox
+       │
+       ▼
+explicit transport selector
+   ┌───┴───┐
+   │       │
+  FCM     ntfy
+active   rollback
+```
+
+A small function/config switch is enough. The implementation default is
+`ACTIVE_TRANSPORT = "ntfy"`; controlled QA may select `"fcm"`.
+
+No generic plugin framework.
+
+No default fanout to both.
+
+---
+
+## 13. Failure Domains
+
+### Hermes process failure
+Outbox row persists.
+
+### Network / FCM transient failure
+Row remains unsent/retryable.
+
+### FCM accepts, DB commit fails
+Duplicate retry possible; safe through Ackline dedupe.
+
+### Invalid/stale FID
+Actionable target failure; no silent infinite loop.
+
+### Missing E2EE key
+Fail before FCM; row remains unsent.
+
+### Bad Firebase credential
+Operational failure; no false sent state.
+
+### Ackline missing key
+Existing Phase 5 fail-closed behavior.
+
+### Tailscale unavailable
+Push still works; ACK waits/retries.
+
+---
+
+## 14. Scheduler Constraint
+
+The actual Hermes scheduler is part of the production architecture. The
+existing on-demand Hermes AI/gateway invocation remains the scheduler; Phase 6
+adds no cron, launchd, polling, or periodic retry process.
+
+Phase 6 must use its real:
+- interpreter;
+- environment;
+- working directory;
+- permissions;
+- cadence.
+
+A sender that works only from an interactive terminal is not production-ready.
+
+---
+
+## 15. Minimalism Rules
+
+Do not add:
+- message broker;
+- Redis;
+- queue SaaS;
+- Firebase database;
+- public API;
+- extra Android service;
+- foreground service;
+- transport abstraction framework;
+- multi-device registry;
+- key server.
+
+The existing SQLite outbox is already the queue.
+
+---
+
+## 16. Phase 6 Success Shape
+
+At closure:
+
+```text
+Hermes queue
+→ encrypted FCM
+→ Ackline
+```
+
+is the validated production realtime route.
+
+ntfy remains available as rollback until the later real-world replacement gate.
+
+Phase 7 then adds recovery/reconciliation without changing the realtime path.

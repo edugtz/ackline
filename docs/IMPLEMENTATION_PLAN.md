@@ -1,26 +1,209 @@
-# Phase 5 — Application-Level E2EE Implementation Plan
+# Phase 6 — Hermes Outbox / Sender Integration Implementation Plan
 
 ## 1. Status
 
-**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PASSED — READY TO MERGE**
+**IMPLEMENTED — AUTOMATED REVIEW/QA PENDING**
 
-Branch: `5-application-e2ee`
+Phase: `6 — Hermes Outbox / Sender Integration`
+
+Proposed Ackline branch: `6-hermes-outbox-fcm`
 
 Base: `dev`
 
-Implementation and automated validation are complete. Physical QA on the Oppo Find X9 Pro passed all 19 test cases. The first Phase 5 commit was pushed, and final independent/GitHub review passed. This branch is ready to merge after this documentation cleanup commit is remotely verified.
+Phase 5 is merged and frozen as the E2EE baseline.
+
+The preflight is complete. Approved implementation decisions are recorded
+below and are now reflected in the Hermes `phase-6-fcm` branch.
+
+### Approved decisions
+
+- Hermes owns `~/.hermes/personal-admin/fcm_sender.py`.
+- `notification_state.py` remains the dispatcher and database owner.
+- Production Python is `~/.hermes/personal-admin/.venv/bin/python` with
+  `firebase-admin` installed.
+- FID is read from `~/.hermes/secrets/ackline-fid`; the implementation does
+  not populate that file.
+- Firebase credentials are loaded explicitly from
+  `~/.hermes/secrets/firebase-service-account.json`.
+- Existing on-demand Hermes invocation remains the scheduler.
+- The schema, Android production code, and `ack_server.py` are unchanged.
+- `ntfy` remains the default rollback transport; no dual-send is used.
 
 ---
 
 ## 2. Goal
 
-Make the FCM transport payload opaque to Firebase/FCM.
+Move the real Hermes Personal Admin notification outbox from ntfy transport to encrypted FCM without weakening durability.
 
-Before:
+Target:
 
 ```text
-FCM data:
-protocol
+Hermes queue
+→ persistent notifications row
+→ dispatcher
+→ production FCM sender
+→ Phase 5 AES-GCM envelope
+→ Ackline
+```
+
+Primary correctness rule:
+
+```text
+no successful FCM acceptance
+=
+no sent_at
+```
+
+---
+
+## 3. Existing Contracts That Must Survive
+
+### Hermes outbox
+
+The completed preflight inspected the actual implementation. The surviving
+contracts include:
+- stable `notification_id`;
+- persistent `notifications` table;
+- generated `ack_token`;
+- `created_at`;
+- `sent_at`;
+- send attempts/error metadata;
+- current ntfy publisher;
+- queue/dispatch/status commands.
+
+Do not assume exact behavior without inspection.
+
+### Ackline
+
+Do not redesign:
+- encrypted-only FCM envelope;
+- strict parser;
+- AES-256-GCM;
+- AndroidKeyStore;
+- Room INSERT IGNORE;
+- explicit Visto;
+- durable WorkManager ACK.
+
+---
+
+## 4. Preflight Decisions Required
+
+### A. Repository ownership
+
+Determine:
+- whether `~/.hermes/personal-admin` is git-controlled;
+- where Hermes production code is versioned;
+- whether Phase 6 spans one or two repositories;
+- safe branch/review workflow.
+
+### B. Dispatcher semantics
+
+Inspect exact `notification_state.py`:
+- pending-row query;
+- ordering;
+- transaction boundaries;
+- `send_attempts`;
+- `last_attempt_at`;
+- `last_error`;
+- `sent_at`;
+- publisher exception behavior;
+- batch behavior.
+
+### C. ntfy publisher
+
+Inspect:
+- exact `publish(row)` contract;
+- credential source;
+- HTTP behavior;
+- timeout/response rules;
+- message ID handling;
+- retry implications;
+- coupling to ACK.
+
+### D. Scheduler
+
+Discover unattended execution:
+- cron/launchd/wrapper;
+- interpreter;
+- working directory;
+- environment;
+- cadence;
+- logs.
+
+The final sender must work there without interactive shell setup.
+
+### E. Python runtime
+
+Confirm:
+- supported interpreter;
+- `firebase-admin`;
+- `cryptography`;
+- FID-targeting support;
+- absolute production interpreter/venv path.
+
+### F. Credentials
+
+Confirm metadata only:
+- Firebase credential path/mode/project;
+- E2EE key path/size/mode;
+- no secret output.
+
+### G. FID source
+
+Choose durable local configuration:
+- not hardcoded;
+- not shell-only;
+- replaceable after reinstall;
+- available to scheduler.
+
+### H. Protocol parity
+
+Confirm Phase 5 constants:
+
+```text
+v = 1
+kid = ackline-main
+AES-256-GCM
+nonce = 12 bytes
+tag = 16 bytes
+AAD = ackline-e2ee|v=1|kid=<kid>
+MAX_INNER_PAYLOAD_BYTES = 2500
+outer exact keys = v/kid/nonce/ciphertext
+```
+
+### I. Error taxonomy
+
+Map actual Firebase Admin exceptions into:
+- accepted;
+- transient/retryable;
+- permanent target;
+- permanent configuration;
+- unknown safe handling.
+
+### J. Invalid FID state
+
+Determine smallest truthful persistence model:
+- never set `sent_at`;
+- avoid endless silent retry;
+- allow re-pair/update FID;
+- allow affected notification recovery.
+
+### K. ntfy rollback
+
+Choose minimal explicit transport selector:
+- one active transport;
+- ntfy retained as rollback;
+- no default dual-send.
+
+---
+
+## 5. Proposed Sender Responsibility
+
+Exact file path is a preflight output.
+
+Conceptually the sender receives:
+
+```text
 notification_id
 level
 title
@@ -29,913 +212,302 @@ created_at
 ack_token
 ```
 
-After:
+and configured operational inputs:
 
 ```text
-FCM data:
-v
-kid
-nonce
-ciphertext
-```
-
-After authenticated decryption, the existing Phase 4 inner alert model continues unchanged.
-
----
-
-## 3. Non-Negotiable Invariants
-
-1. No title/message/notification ID/ACK token appears in FCM-visible `data`.
-2. AES-GCM authentication failure produces no alert.
-3. No plaintext fallback on the production receive path.
-4. The key is not stored in source, BuildConfig, Room, SharedPreferences, logs, or prompts.
-5. The Mac key file is exactly 32 random bytes.
-6. Android stores the imported shared key in AndroidKeyStore.
-7. Every production encryption uses a fresh 12-byte random nonce.
-8. GCM authentication tag is 128 bits.
-9. `v` and `kid` are authenticated through canonical AAD.
-10. Unknown `kid` fails closed.
-11. Existing Room dedupe remains by decrypted `notificationId`.
-12. Existing Phase 4 ACK sync still receives the decrypted `ackToken`.
-13. No Room migration was required.
-14. No real personal alert content during Phase 5 QA.
-15. No custom cryptographic implementation.
-
----
-
-## 4. Required Repository Discovery
-
-Read:
-
-```text
-docs/CURRENT_PHASE.md
-docs/IMPLEMENTATION_PLAN.md
-docs/ARCHITECTURE.md
-docs/PROJECT_SPEC.md
-docs/ACCEPTANCE_CRITERIA.md
-docs/MVP_PHASES.md
-AGENTS.md
-```
-
-Inspect exact current paths for:
-
-```text
-app/build.gradle.kts
-gradle/libs.versions.toml
-app/src/main/AndroidManifest.xml
-
-AcklineApplication.kt
-AcklineMessagingService.kt
-IncomingAlertEnvelope.kt
-AlertRepository.kt
-AlertEntity.kt
-AcklineDatabase.kt
-AlertDao.kt
-
-ack/AckRemoteClient.kt
-ack/AckSyncRunner.kt
-ack/AckSyncScheduler.kt
-ack/AckSyncWorker.kt
-
-current Setup implementation
-all payload/parser tests
-all relevant instrumented tests
-
-tools/firebase_sender.py
-tools/test_firebase_sender.py
-```
-
-Do not assume documentation path guesses are exact.
-
----
-
-## 5. Local Environment Discovery
-
-Inspect metadata only for:
-
-```text
-~/.hermes/secrets/
-```
-
-Determine whether:
-
-```text
-~/.hermes/secrets/hermes-notify.key
-```
-
-already exists.
-
-Never print/read key contents into reports.
-
-If present, verify only:
-
-- size;
-- mode;
-- ownership if useful.
-
-Also inspect which Python environment is actually used for the FCM sender and whether `cryptography`/`AESGCM` is available.
-
-Do not modify the real Hermes outbox in Phase 5.
-
----
-
-## 6. Crypto Protocol v1
-
-Outer FCM data:
-
-```text
-v
-kid
-nonce
-ciphertext
-```
-
-Exact semantics:
-
-```text
-v = "1"
-kid = configured simple identifier
-nonce = base64url-no-padding(12 random bytes)
-ciphertext = base64url-no-padding(AES-GCM ciphertext || 16-byte tag)
-```
-
-No separate `tag` field.
-
----
-
-## 7. Inner JSON
-
-Build compact UTF-8 JSON from existing alert data:
-
-```json
-{
-  "protocol": "1",
-  "notification_id": "...",
-  "level": "...",
-  "title": "...",
-  "message": "...",
-  "created_at": "...",
-  "ack_token": "..."
-}
-```
-
-Omit `ack_token` when absent.
-
-Do not duplicate validation rules already owned by `parseAcklinePayload()`.
-
----
-
-## 8. AAD
-
-Canonical bytes:
-
-```text
-ackline-e2ee|v=1|kid=<kid>
-```
-
-UTF-8.
-
-Changing `v` or `kid` must fail authentication.
-
----
-
-## 9. Base64URL
-
-Use RFC 4648 URL-safe alphabet without `=` padding.
-
-Reject malformed input.
-
-Nonce decoded length must equal exactly `12`.
-
----
-
-## 10. AndroidKeyStore Alias
-
-Implemented alias:
-
-```text
-ackline.payload.ackline-main
-```
-
-The MVP alias is fixed as shown above.
-
-Key lookup:
-
-```text
-expected configured kid
-→ exact Keystore alias
-```
-
-Do not iterate aliases and guess.
-
----
-
-## 11. Android Key Import
-
-Preferred implementation:
-
-1. raw 32-byte key is staged into app-private storage;
-2. app reads exact bytes;
-3. validates length == 32;
-4. temporarily wraps as `SecretKeySpec(bytes, "AES")`;
-5. imports via `KeyStore.setEntry(...)`;
-6. `KeyProtection` restricts:
-   - `PURPOSE_DECRYPT`
-   - `BLOCK_MODE_GCM`
-   - `ENCRYPTION_PADDING_NONE`
-7. wipe temporary byte array best-effort;
-8. delete staging file;
-9. future decrypt obtains `SecretKey` from AndroidKeyStore.
-
-Direct import was verified on the target device/API.
-
----
-
-## 12. Key Provisioning Transport
-
-Preferred MVP: USB/ADB-only.
-
-Requirements:
-
-- key bytes do not appear in shell command arguments/history;
-- no terminal output of key bytes;
-- staging destination is app-private;
-- restrictive permissions;
-- staging file removed after successful import;
-- failure behavior documented.
-
-The approved one-time provisioning command is:
-
-```sh
-adb exec-out run-as com.edu.ackline sh -c \
-  'umask 077; cat > /data/data/com.edu.ackline/files/.e2ee_staging.bin' \
-  < ~/.hermes/secrets/hermes-notify.key
-```
-
-Key bytes travel through stdin, not command-line arguments, and are never printed. The staging file is app-private and uses explicit `umask 077`. Ackline imports it into AndroidKeyStore, deletes the staging file after the import attempt, and never silently replaces an existing Keystore alias.
-
-Normal process restart, device reboot, and app update/install-replace do not normally require re-provisioning because the Keystore entry persists. App uninstall removes the app Keystore namespace, so uninstall/reinstall requires re-provisioning.
-
-Do not put the key in `local.properties`.
-
----
-
-## 13. Import Trigger
-
-Preferred minimal behavior:
-
-```text
-Ackline startup or explicit Setup action
-→ if approved staging file exists
-→ import once
-→ delete staging file
-```
-
-Do not rewrite an existing alias silently.
-
-If startup import implies main-thread/blocking issues, use the smallest bounded background path.
-
----
-
-## 14. Setup Status
-
-Minimal product addition:
-
-```text
-Cifrado: Listo
-```
-
-or:
-
-```text
-Cifrado: No configurado
-```
-
-Optional `kid` display only if useful.
-
-No raw key, no key copy button, no broad Setup redesign.
-
----
-
-## 15. PayloadCrypto
-
-Expected narrow component:
-
-```text
-security/PayloadCrypto.kt
-```
-
-Responsibilities:
-
-- retrieve expected Keystore key;
-- decode nonce/ciphertext;
-- construct AAD;
-- AES/GCM decrypt;
-- return plaintext or small failure result.
-
-It must not know Room, network, FCM classes, notifications, or ACK logic.
-
----
-
-## 16. Encrypted Envelope Parser
-
-Expected concept:
-
-```text
-push/EncryptedPushEnvelope.kt
-```
-
-Responsibilities:
-
-- require `v`, `kid`, `nonce`, `ciphertext`;
-- validate version/kid/bounds;
-- Base64URL decode safely.
-
-Firebase types remain at the messaging boundary.
-
----
-
-## 17. Inner JSON Decoder
-
-After decrypt:
-
-```text
-plaintext bytes
-→ UTF-8 JSON object
-→ Map<String,String>
-→ existing parseAcklinePayload()
-```
-
-Prefer a simple existing/platform JSON mechanism if sufficient.
-
-Do not add a serialization framework solely for this object without evidence.
-
----
-
-## 18. Messaging Service
-
-Replace the plaintext FCM path with encrypted-only receive behavior:
-
-```text
-onMessageReceived(remoteMessage)
-→ EncryptedPushEnvelope.parse(remoteMessage.data)
-→ PayloadCrypto.decrypt(...)
-→ InnerPayloadDecoder.decode(...)
-→ parseAcklinePayload(...)
-→ repository.insertIncoming(...)
-→ notify only when INSERTED
-```
-
-Persist-before-notify remains.
-
-No plaintext fallback.
-
-No WorkManager/coroutine solely for decryption.
-
----
-
-## 19. Failure Taxonomy
-
-Small sanitized categories only, for example:
-
-```text
-malformed_envelope
-unsupported_version
-unknown_kid
-key_not_configured
-authentication_failed
-invalid_inner_payload
-oversize
-```
-
-No detailed crypto oracle in UI.
-
-No raw exception/payload logging.
-
----
-
-## 20. AES-GCM Android
-
-Use:
-
-```kotlin
-Cipher.getInstance("AES/GCM/NoPadding")
-GCMParameterSpec(128, nonce)
-cipher.init(Cipher.DECRYPT_MODE, key, spec)
-cipher.updateAAD(aad)
-cipher.doFinal(ciphertextAndTag)
-```
-
-Catch authentication failure and normalize safely.
-
-Do not compare tags manually.
-
----
-
-## 21. Python E2EE Helper
-
-Prefer:
-
-```text
-tools/payload_crypto.py
-```
-
-Use:
-
-```python
-cryptography.hazmat.primitives.ciphers.aead.AESGCM
-```
-
-Responsibilities:
-
-- load exactly 32-byte key file;
-- validate `kid`;
-- generate fresh 12-byte nonce;
-- build AAD;
-- encrypt compact UTF-8 JSON;
-- Base64URL encode without padding;
-- return outer `dict[str, str]`.
-
-No Firebase imports in the crypto helper.
-
----
-
-## 22. Development Sender
-
-`tools/firebase_sender.py` should:
-
-1. build existing inner data;
-2. keep optional `ack_token` inside inner payload;
-3. encrypt using Phase 5 helper;
-4. send only encrypted outer data;
-5. preserve level-based FCM priority selection.
-
-Preferred configuration:
-
-```text
-ACKLINE_E2EE_KEY_FILE
-ACKLINE_E2EE_KID
-```
-
-If key/kid missing, fail before FCM send.
-
-Do not silently send plaintext.
-
----
-
-## 23. Mac Key Generation
-
-The implemented helper is `tools/generate_e2ee_key.py`; it safely creates a new key file without overwrite.
-
-Requirements:
-
-- 32 CSPRNG bytes;
-- restrictive permissions;
-- refuse overwrite;
-- never stdout key material.
-
-If the real key file exists, do not regenerate it.
-
----
-
-## 24. Key File Validation
-
-Reject size != 32 bytes.
-
-No truncation.
-
-No hashing arbitrary contents into a key.
-
-No password derivation.
-
----
-
-## 25. `kid` Configuration
-
-Same `kid` must be used by:
-
-- sender;
-- Android expected configuration;
-- Android Keystore alias mapping.
-
-`kid` is non-secret.
-
-The implemented deployment configuration uses the fixed non-secret MVP `kid` `ackline-main`.
-
-Never put key bytes in BuildConfig.
-
----
-
-## 26. Payload Size
-
-The implemented conservative cap is:
-
-Implemented target:
-
-```text
-MAX_INNER_PAYLOAD_BYTES = 2500
-```
-
-Sender rejects larger compact UTF-8 JSON before encryption/send.
-
-Android applies an outer ciphertext bound too.
-
----
-
-## 27. Cross-Language Vector
-
-Create deterministic test fixture:
-
-```text
-fixed TEST key
-fixed TEST nonce
-fixed kid
-fixed AAD
-fixed fake compact JSON
-expected ciphertext+tag Base64URL
-```
-
-Python verifies encryption result.
-
-Android/JCA verifies decryption.
-
-Fixed nonce is tests only.
-
----
-
-## 28. Keystore Tests
-
-Instrumented tests should verify:
-
-- import succeeds;
-- key is retrievable as a `SecretKey` reference;
-- `getEncoded()` does not expose raw material on target path;
-- known ciphertext decrypts;
-- wrong-sized import rejected;
-- test alias cleanup;
-- staging file cleanup;
-- key survives process/app restart where practical.
-
-Use dedicated test aliases, never the real user alias.
-
----
-
-## 29. Crypto Tests
-
-Cover:
-
-- envelope validation;
-- Base64URL;
-- AAD;
-- `kid`;
-- valid deterministic decrypt;
-- wrong key;
-- tampered ciphertext;
-- tampered tag;
-- wrong nonce;
-- changed AAD;
-- invalid inner JSON;
-- plaintext FCM rejection.
-
----
-
-## 30. Duplicate Delivery
-
-Encrypt same logical alert twice with same inner `notification_id` and different fresh nonces.
-
-After decrypt, Room `INSERT IGNORE` still yields one row and no repost.
-
----
-
-## 31. ACK Regression
-
-Valid encrypted payload containing `ack_token` must still flow:
-
-```text
-receive
-→ decrypt
-→ persist storage-only token
-→ explicit Visto
-→ PENDING
-→ WorkManager
-→ Hermes ACK
-→ SYNCED
-```
-
-Do not modify ACK HTTP protocol.
-
----
-
-## 32. Logging
-
-Forbidden:
-
-```text
-key
-Base64 key
-plaintext JSON
-title/message
-ACK token
-ciphertext dump
 FID
-service-account contents
+E2EE key path
+kid
+Firebase credential
 ```
 
-Allowed bounded categories:
+It should:
+1. validate inputs;
+2. build compact inner JSON;
+3. reject oversize;
+4. create fresh 12-byte nonce;
+5. AES-256-GCM encrypt with canonical AAD;
+6. construct exact four-field FCM `data`;
+7. choose FCM priority from level;
+8. call Firebase Admin;
+9. return a small sanitized result.
+
+Preferred separation:
 
 ```text
-Encrypted payload rejected: authentication_failed
-Encrypted payload rejected: key_not_configured
+dispatcher owns DB state
+sender owns one transport attempt
 ```
 
-Avoid expected-failure stack traces.
+The sender should not independently mutate the Hermes SQLite outbox unless preflight finds a compelling reason.
 
 ---
 
-## 33. Room / Data Model
+## 6. Proposed Dispatch Ordering
 
-Expected:
+Conceptual target:
 
 ```text
-AcklineDatabase version = 3
+for each eligible unsent row:
+    prepare/record attempt using existing semantics
+    result = sender.send(row)
+
+    if accepted:
+        record sent_at
+        clear transient error state
+    elif transient:
+        keep sent_at NULL
+        record sanitized retryable error
+    elif permanent:
+        keep sent_at NULL
+        record actionable terminal state
 ```
 
-No new columns for nonce/ciphertext/kid/errors.
+No tight retry loop inside one dispatch invocation unless the current design already requires it.
 
-If schema v4 is proposed, stop and justify before implementation.
-
----
-
-## 34. App Backup / Storage
-
-Keep `android:allowBackup="false"`.
-
-No external-storage key persistence.
-
-Temporary provisioning file must be app-private and removed after successful import.
+The existing scheduler/outbox cadence should own retries.
 
 ---
 
-## 35. WorkManager / Tailscale
+## 7. FCM Accepted Semantics
 
-No Phase 5 architecture change expected.
+Firebase Admin success means:
 
-ACK worker remains unaware of E2EE.
+```text
+FCM accepted the message
+```
 
-No Tailscale Serve/Funnel changes.
+It does not mean:
+- device received;
+- device decrypted;
+- Room persisted;
+- notification displayed.
 
----
+If `sent_at` already represents provider acceptance, preserve that meaning.
 
-## 36. Physical Provisioning QA
-
-1. install Phase 5 APK;
-2. create/verify test key file;
-3. stage via approved USB/ADB method without printing;
-4. import;
-5. verify staging file removed;
-6. verify Setup ready;
-7. restart app;
-8. verify still ready.
+The preflight confirmed that `sent_at` records provider acceptance, not
+end-device display or decryption.
 
 ---
 
-## 37. Physical Encrypted Delivery QA
+## 8. Ambiguous Success Window
 
-Send fake encrypted alert.
-
-Expected:
+Required safety case:
 
 ```text
 FCM accepted
-→ background service decrypts
-→ Room row
-→ native notification
-→ Inbox row
+Hermes fails before sent_at commit
+dispatcher retries same row
 ```
-
----
-
-## 38. Physical Tamper QA
-
-Flip ciphertext/tag byte after encryption.
 
 Expected:
+- same `notification_id`;
+- fresh nonce/ciphertext;
+- FCM may accept twice;
+- Ackline persists one logical row;
+- duplicate does not repost native notification.
+
+Do not chase exactly-once delivery.
+
+---
+
+## 9. Error Policy Requirements
+
+### Transient
+
+- remain eligible for retry;
+- no `sent_at`;
+- sanitized error category only.
+
+### Invalid/stale FID
+
+Must become actionable.
+
+Desired operator shape:
 
 ```text
-FCM may deliver envelope
-→ Ackline rejects
-→ no row
-→ no tray
-→ no crash
+Ackline reinstalled / FID changed
+→ Hermes indicates re-pair required
+→ FID updated
+→ delivery can resume
 ```
 
----
+Exact DB state is a preflight decision.
 
-## 39. Physical Wrong-Key QA
+### Credential/project/config errors
 
-Encrypt fake payload with another 32-byte test key but same expected `kid`.
+Operational failure, not notification success.
 
-Expected authentication failure and no alert.
-
----
-
-## 40. Physical Plaintext Rejection QA
-
-Send controlled legacy Phase 4 plaintext payload.
-
-Expected no row/no tray.
-
-Do not keep plaintext as normal sender behavior.
+Avoid retry storms.
 
 ---
 
-## 41. Background QA
+## 10. Security Requirements
 
-With key provisioned:
+Never log:
+- service-account private key;
+- E2EE key;
+- `ack_token`;
+- title;
+- message;
+- plaintext inner JSON;
+- ciphertext;
+- full FID.
 
-- background/remove Ackline from Recents without Force Stop;
-- send encrypted IMPORTANT fake alert;
-- verify decrypt/notification without manually opening app.
+Do not dump Firebase payload dicts.
 
-No full Phase 1 matrix unless regression appears.
+Do not add debug plaintext transport.
 
 ---
 
-## 42. Files Likely to Modify
+## 11. Testing Strategy
 
-Likely:
+### Sender unit tests
+
+At minimum:
+- row `created_at` preserved;
+- `ack_token` encrypted inside;
+- exact outer key set;
+- priority mapping;
+- fresh nonce;
+- oversize rejection;
+- missing/bad key configuration;
+- missing/bad FID configuration;
+- accepted result mapping;
+- transient exception mapping;
+- unregistered FID mapping;
+- auth/config exception mapping;
+- no secret-bearing error output.
+
+### Dispatcher tests
+
+At minimum:
+- accepted → `sent_at` only after sender success;
+- transient → `sent_at` remains NULL;
+- permanent → no false `sent_at`;
+- attempt/error metadata correct;
+- later success clears/updates error state;
+- batch behavior remains sane;
+- one bad row does not corrupt another row.
+
+### Integration tests
+
+Use a narrow fake sender boundary for DB/dispatcher tests.
+
+Do not make unit tests depend on Firebase network.
+
+### Controlled real FCM QA
+
+After code review:
+1. queue synthetic notification via real Hermes CLI/API;
+2. dispatch via production FCM sender;
+3. verify FCM acceptance → correct Hermes state;
+4. verify Ackline receives/decrypts/displays;
+5. verify ACK regression;
+6. simulate duplicate logical retry;
+7. simulate transient sender failure;
+8. test stale/invalid FID with controlled config;
+9. restore current FID;
+10. verify scheduler/non-interactive execution;
+11. verify ntfy rollback selector.
+
+---
+
+## 12. ntfy Cutover
+
+Do not delete ntfy.
+
+A minimal conceptual selector is:
 
 ```text
-AcklineApplication.kt
-AcklineMessagingService.kt
-IncomingAlertEnvelope.kt
-current Setup implementation
-tools/firebase_sender.py
-tools/test_firebase_sender.py
+transport = fcm | ntfy
+```
+
+but exact configuration must follow existing Hermes conventions.
+
+No generic plugin framework.
+
+No default dual-send.
+
+---
+
+## 13. Likely Files
+
+The completed preflight discovered the exact paths and runtime ownership.
+
+Expected Hermes-side candidates:
+
+```text
+~/.hermes/personal-admin/notification_state.py
+~/.hermes/personal-admin/ack_server.py      # inspect; likely unchanged
+Hermes scheduler/launchd/cron config
+Hermes local secrets/config
+new production FCM sender module
+targeted Python tests
+```
+
+Expected Ackline-side candidates:
+
+```text
 docs/CURRENT_PHASE.md
 docs/IMPLEMENTATION_PLAN.md
 docs/ARCHITECTURE.md
+existing Phase 5 protocol/dev sender tests for parity reference
 ```
 
-Possibly build config for non-secret `kid`.
-
-The final implementation files are listed below.
+Android production files should normally remain unchanged.
 
 ---
 
-## 43. Files Likely to Create
+## 14. Do Not Do
 
-Conceptually:
+No:
+- Room migration by default;
+- ACK redesign;
+- Android UI work;
+- reconciliation;
+- pending-notification GET;
+- polling;
+- key rotation;
+- multi-device support;
+- SaaS/backend;
+- Firestore/Auth/Functions;
+- foreground service;
+- production dual-send unless justified;
+- deletion of ntfy rollback;
+- runtime dependency on Ackline checkout;
+- real secret output.
+
+---
+
+## 15. Preflight Exit Criteria
+
+Valid results:
 
 ```text
-security/PayloadCrypto.kt
-security/PayloadKeyStore.kt
-push/EncryptedPushEnvelope.kt
-push/InnerPayloadDecoder.kt
-
-corresponding tests
-
-tools/payload_crypto.py
-tools/test_payload_crypto.py
+READY
+READY_WITH_DECISIONS
+BLOCKED
 ```
 
-Do not over-split.
+READY requires:
+- exact repository/runtime ownership;
+- exact production Python interpreter;
+- exact scheduler environment;
+- exact Firebase credential loading;
+- exact durable FID config;
+- exact production sender location;
+- exact dispatcher seam;
+- exact error mapping;
+- exact invalid-FID state/recovery semantics;
+- exact ntfy rollback selector;
+- exact test plan;
+- no secret exposure required.
 
 ---
 
-## 44. Files Not to Touch Without Evidence
+## 16. Implementation Status
 
-Avoid changes to:
-
-```text
-Room schema/database version
-AlertDao ACK SQL
-AckSyncRunner
-AckSyncScheduler
-AckSyncWorker
-HttpsAckRemoteClient
-notification channels
-Inbox visual design
-Detail visual design
-Hermes ack_server.py
-Tailscale configuration
-Hermes Personal Admin business logic
-```
-
-Phase 6 owns production outbox integration.
-
----
-
-## 45. Dependency Policy
-
-Android: prefer no new runtime crypto dependency.
-
-Python: `cryptography` AESGCM is expected if available/appropriately versioned.
-
-Do not add by default:
-
-```text
-Tink
-BouncyCastle solely for AES-GCM
-Retrofit
-Hilt
-Koin
-Firebase Auth
-Firestore
-```
-
----
-
-## 46. Implementation Order
-
-Implementation sequence completed as follows:
-
-1. create Phase 5 branch from current `dev`;
-2. place approved docs;
-3. define constants/AAD/kid/bounds;
-4. implement Python crypto helper + deterministic vector;
-5. implement Android envelope/Base64/AAD;
-6. implement AndroidKeyStore import/storage;
-7. implement PayloadCrypto;
-8. implement inner JSON decoder → existing parser;
-9. switch FCM receive to encrypted-only;
-10. update development sender to encrypted-only;
-11. add minimal Setup readiness;
-12. add unit tests;
-13. add Keystore instrumented tests;
-14. automated validation;
-15. provision Oppo test key;
-16. valid encrypted delivery QA;
-17. tamper/wrong-key/plaintext rejection;
-18. Phase 4 ACK regression;
-19. background receive regression;
-20. independent review passed;
-21. first Phase 5 commit pushed;
-22. final ChatGPT/GitHub review passed;
-23. merge after this documentation cleanup commit is remotely verified.
-
----
-
-## 47. Automated Validation
-
-Expected:
-
-```bash
-./gradlew clean kspDebugKotlin lintDebug testDebugUnitTest assembleDebug
-./gradlew connectedDebugAndroidTest
-
-python3 -m py_compile tools/firebase_sender.py
-python3 -m py_compile tools/payload_crypto.py
-python3 -m unittest discover -s tools -p "test_*.py"
-
-git diff --check
-```
-
-The validation commands are listed above and were executed for this phase.
-
----
-
-## 48. Stop Conditions
-
-Stop rather than improvise if:
-
-- AndroidKeyStore AES import fails on target device;
-- provisioning would require key in shell args/source/clipboard;
-- Python crypto environment is missing/incompatible and changes would affect unrelated Hermes runtime;
-- envelope cannot fit safely within FCM bounds;
-- crypto requires plaintext fallback;
-- Room v4 is proposed without clear product need;
-- real personal payloads are needed for testing;
-- Phase 6 changes become necessary;
-- multi-device/rotation infrastructure becomes necessary;
-- tests expose real key material.
-
----
-
-## 49. Definition of Done
-
-```text
-crypto protocol fixed                         PASS
-Mac key handling safe                         PASS
-AndroidKeyStore import                        PASS
-encrypted-only FCM receive                    PASS
-valid decrypt                                 PASS
-tamper rejection                              PASS
-wrong-key rejection                           PASS
-AAD binding                                   PASS
-plaintext rejection                           PASS
-sender outer payload privacy                  PASS
-duplicate idempotency                         PASS
-Phase 4 ACK regression                        PASS
-physical background receive                   PASS
-no secret leakage                             PASS
-automated validation                          PASS
-independent review                            PASS
-GitHub review                                 PASS
-```
-
-Suggested commit:
-
-```text
-feat: encrypt notification payloads end to end
-```
+The Phase 6 implementation is complete for automated review. Controlled
+real-FCM, physical-device, and production cutover QA remain pending. The user
+owns commits, pushes, and merges.

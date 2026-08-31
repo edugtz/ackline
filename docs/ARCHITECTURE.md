@@ -108,7 +108,7 @@ Example:
 ```json
 {
   "v": "1",
-  "kid": "device-1",
+  "kid": "ackline-main",
   "nonce": "base64url",
   "ciphertext": "base64url"
 }
@@ -537,7 +537,7 @@ Python:
 
 `cryptography` AESGCM.
 
-No broad security framework unless preflight finds a blocker.
+No broad security framework is used; platform cryptography and AndroidKeyStore are sufficient.
 
 ---
 

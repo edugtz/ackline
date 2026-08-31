@@ -2,13 +2,13 @@
 
 ## 1. Status
 
-**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PENDING**
+**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PASSED — READY TO MERGE**
 
 Branch: `5-application-e2ee`
 
 Base: `dev`
 
-Physical QA on the Oppo Find X9 Pro is complete. All 19 test cases passed. Final independent review and user commit/push remain pending.
+Implementation and automated validation are complete. Physical QA on the Oppo Find X9 Pro passed all 19 test cases. The first Phase 5 commit was pushed, and final independent/GitHub review passed. This branch is ready to merge after this documentation cleanup commit is remotely verified.
 
 ---
 
@@ -57,7 +57,7 @@ After authenticated decryption, the existing Phase 4 inner alert model continues
 10. Unknown `kid` fails closed.
 11. Existing Room dedupe remains by decrypted `notificationId`.
 12. Existing Phase 4 ACK sync still receives the decrypted `ackToken`.
-13. No Room migration unless preflight proves one is necessary.
+13. No Room migration was required.
 14. No real personal alert content during Phase 5 QA.
 15. No custom cryptographic implementation.
 
@@ -135,7 +135,7 @@ If present, verify only:
 
 Also inspect which Python environment is actually used for the FCM sender and whether `cryptography`/`AESGCM` is available.
 
-Do not modify the real Hermes outbox in preflight.
+Do not modify the real Hermes outbox in Phase 5.
 
 ---
 
@@ -211,13 +211,13 @@ Nonce decoded length must equal exactly `12`.
 
 ## 10. AndroidKeyStore Alias
 
-Planning alias:
+Implemented alias:
 
 ```text
-ackline.payload.<kid>
+ackline.payload.ackline-main
 ```
 
-Preflight may adjust punctuation if needed.
+The MVP alias is fixed as shown above.
 
 Key lookup:
 
@@ -247,7 +247,7 @@ Preferred implementation:
 8. delete staging file;
 9. future decrypt obtains `SecretKey` from AndroidKeyStore.
 
-Preflight must verify direct import on the target device/API.
+Direct import was verified on the target device/API.
 
 ---
 
@@ -267,23 +267,12 @@ Requirements:
 The approved one-time provisioning command is:
 
 ```sh
-adb shell -T \
-  'run-as com.edu.ackline sh -c "umask 077; mkdir -p files; dd of=files/.e2ee_staging.bin bs=32 count=1 2>/dev/null"' \
+adb exec-out run-as com.edu.ackline sh -c \
+  'umask 077; cat > /data/data/com.edu.ackline/files/.e2ee_staging.bin' \
   < ~/.hermes/secrets/hermes-notify.key
 ```
 
-**Why this form (physically validated on Oppo Find X9 Pro):**
-
-- `run-as` resolves the correct app sandbox instead of hardcoding `/data/data` vs `/data/user/0`.
-- `mkdir -p files` handles a fresh installation where `files/` does not yet exist.
-- `-T` disables PTY allocation, preventing interactive hang on some devices.
-- Key bytes are supplied only via stdin.
-- `dd bs=32 count=1` reads exactly the 32-byte AES-256 key and terminates deterministically instead of depending on EOF behavior.
-- `umask 077` keeps staging permissions restrictive.
-- No key material is printed or supplied in argv.
-- Ackline deletes `.e2ee_staging.bin` after the import attempt.
-
-The previous `adb exec-out` form could hang waiting for EOF on certain devices. The `dd`-based command terminates deterministically.
+Key bytes travel through stdin, not command-line arguments, and are never printed. The staging file is app-private and uses explicit `umask 077`. Ackline imports it into AndroidKeyStore, deletes the staging file after the import attempt, and never silently replaces an existing Keystore alias.
 
 Normal process restart, device reboot, and app update/install-replace do not normally require re-provisioning because the Keystore entry persists. App uninstall removes the app Keystore namespace, so uninstall/reinstall requires re-provisioning.
 
@@ -496,7 +485,7 @@ Do not silently send plaintext.
 
 ## 23. Mac Key Generation
 
-Preflight decides between a tiny helper script or a documented local command.
+The implemented helper is `tools/generate_e2ee_key.py`; it safely creates a new key file without overwrite.
 
 Requirements:
 
@@ -531,7 +520,7 @@ Same `kid` must be used by:
 
 `kid` is non-secret.
 
-Preflight chooses the least invasive deployment configuration.
+The implemented deployment configuration uses the fixed non-secret MVP `kid` `ackline-main`.
 
 Never put key bytes in BuildConfig.
 
@@ -539,9 +528,9 @@ Never put key bytes in BuildConfig.
 
 ## 26. Payload Size
 
-Preflight must calculate a conservative cap.
+The implemented conservative cap is:
 
-Planning target:
+Implemented target:
 
 ```text
 MAX_INNER_PAYLOAD_BYTES = 2500
@@ -790,7 +779,7 @@ docs/ARCHITECTURE.md
 
 Possibly build config for non-secret `kid`.
 
-Exact list comes from preflight.
+The final implementation files are listed below.
 
 ---
 
@@ -859,7 +848,7 @@ Firestore
 
 ## 46. Implementation Order
 
-After approved preflight:
+Implementation sequence completed as follows:
 
 1. create Phase 5 branch from current `dev`;
 2. place approved docs;
@@ -880,10 +869,10 @@ After approved preflight:
 17. tamper/wrong-key/plaintext rejection;
 18. Phase 4 ACK regression;
 19. background receive regression;
-20. independent review;
-21. user commit/push;
-22. ChatGPT GitHub review;
-23. merge only after PASS.
+20. independent review passed;
+21. first Phase 5 commit pushed;
+22. final ChatGPT/GitHub review passed;
+23. merge after this documentation cleanup commit is remotely verified.
 
 ---
 
@@ -902,7 +891,7 @@ python3 -m unittest discover -s tools -p "test_*.py"
 git diff --check
 ```
 
-Preflight provides exact commands if names differ.
+The validation commands are listed above and were executed for this phase.
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PENDING**
+**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PASSED — READY TO MERGE**
 
 Phase: `5 — Application-Level E2EE`
 
@@ -152,7 +152,7 @@ Phase 5 outer data payload:
 ```json
 {
   "v": "1",
-  "kid": "device-1",
+  "kid": "ackline-main",
   "nonce": "<base64url-no-padding>",
   "ciphertext": "<base64url-no-padding ciphertext+GCM-tag>"
 }
@@ -238,13 +238,13 @@ Requirements:
 - do not guess/fallback to another key;
 - future rotation can add a new key without changing envelope v1.
 
-Planning identifier shape:
+Implemented `kid` validation pattern:
 
 ```text
 [A-Za-z0-9._-]{1,64}
 ```
 
-Preflight must confirm the exact deployment mechanism.
+The deployment mechanism is the documented USB/ADB provisioning command below.
 
 ---
 
@@ -467,13 +467,13 @@ Encryption + tag + Base64 add overhead to the FCM payload.
 
 Phase 5 must define a conservative maximum inner plaintext size and reject oversize before FCM send.
 
-Planning target:
+Implemented target:
 
 ```text
 ~2500 UTF-8 bytes maximum compact inner JSON
 ```
 
-Preflight must calculate/confirm a safe bound against the actual four-field envelope and FCM limit.
+The implemented conservative bound is `MAX_INNER_PAYLOAD_BYTES = 2500`, enforced against the four-field envelope.
 
 ---
 
@@ -527,7 +527,7 @@ KeyProtection
 SecretKeySpec during import only
 ```
 
-Do not add a crypto SDK unless preflight finds a concrete blocker.
+No crypto SDK is required; the implementation uses platform JCA/JCE with AndroidKeyStore.
 
 No Tink dependency by default.
 

@@ -10,6 +10,8 @@ import com.edu.ackline.ack.HttpsAckRemoteClient
 import com.edu.ackline.ack.LocalAcknowledgmentManager
 import com.edu.ackline.data.AlertRepository
 import com.edu.ackline.data.local.AcklineDatabase
+import com.edu.ackline.security.PayloadCrypto
+import com.edu.ackline.security.PayloadKeyStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -44,7 +46,19 @@ class AcklineApplication : Application() {
         AckSyncRunner(alertRepository, ackRemoteClient)
     }
 
+    internal val payloadKeyStore: PayloadKeyStore by lazy {
+        PayloadKeyStore(this)
+    }
+
+    internal val payloadCrypto: PayloadCrypto by lazy {
+        PayloadCrypto(payloadKeyStore)
+    }
+
     val acknowledgmentExecutor: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor()
+    }
+
+    private val provisioningExecutor: ExecutorService by lazy {
         Executors.newSingleThreadExecutor()
     }
 
@@ -54,6 +68,17 @@ class AcklineApplication : Application() {
             ackSyncScheduler.enqueue()
         } catch (_: Exception) {
             Log.e(TAG, "startup ACK sync scheduling failed")
+        }
+        provisioningExecutor.execute {
+            try {
+                payloadKeyStore.importStagedKeyIfPresent(BuildConfig.PAYLOAD_ENCRYPTION_KID)
+                SetupState.onEncryptionStatusChanged(
+                    payloadKeyStore.isReady(BuildConfig.PAYLOAD_ENCRYPTION_KID),
+                )
+            } catch (_: Exception) {
+                Log.e(TAG, "payload key provisioning failed")
+                SetupState.onEncryptionStatusChanged(false)
+            }
         }
     }
 

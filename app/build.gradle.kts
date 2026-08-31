@@ -23,6 +23,7 @@ fun String.toBuildConfigStringLiteral(): String =
         "\""
 
 val ackBaseUrl = localProperties.getProperty("ackline.ackBaseUrl").orEmpty()
+val payloadEncryptionKid = "ackline-main"
 
 android {
     namespace = "com.edu.ackline"
@@ -39,6 +40,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "ACK_BASE_URL", ackBaseUrl.toBuildConfigStringLiteral())
+        buildConfigField(
+            "String",
+            "PAYLOAD_ENCRYPTION_KID",
+            payloadEncryptionKid.toBuildConfigStringLiteral(),
+        )
     }
 
     buildTypes {

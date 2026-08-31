@@ -107,6 +107,11 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
             },
         )
 
+        SetupRow(
+            label = "Cifrado",
+            value = if (setupState.encryptionReady) "Listo" else "No configurado",
+        )
+
         val installationId = setupState.installationId
         Column {
             Text(

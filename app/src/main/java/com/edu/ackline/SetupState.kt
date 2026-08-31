@@ -11,6 +11,7 @@ data class SetupUiState(
     val registrationState: RegistrationState = RegistrationState.Waiting,
     val installationId: String? = null,
     val lastMessageSummary: String? = null,
+    val encryptionReady: Boolean = false,
 )
 
 /**
@@ -42,5 +43,9 @@ object SetupState {
 
     fun onMessageReceived(summary: String) {
         _state.update { it.copy(lastMessageSummary = summary) }
+    }
+
+    fun onEncryptionStatusChanged(isReady: Boolean) {
+        _state.update { it.copy(encryptionReady = isReady) }
     }
 }

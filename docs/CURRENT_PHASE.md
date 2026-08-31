@@ -2,11 +2,11 @@
 
 ## Status
 
-**IMPLEMENTATION — IN PROGRESS**
+**IMPLEMENTED — PHYSICAL QA PASSED — FINAL REVIEW PENDING**
 
-Phase: `4 — Durable Remote ACK Sync`
+Phase: `5 — Application-Level E2EE`
 
-Implementation branch: `4-durable-remote-ack`
+Implementation branch: `5-application-e2ee`
 
 Base branch: `dev`
 
@@ -14,790 +14,732 @@ Base branch: `dev`
 
 ## Objective
 
-Synchronize explicit local acknowledgments from Ackline back to Hermes without making local UX depend on Mac, Tailscale, or ACK-endpoint availability.
+Protect Hermes alert contents from being visible to Firebase/FCM or intermediaries as plaintext.
 
-Phase 3 already established the durable local truth:
-
-`Pendiente` → explicit user action → `Vista`
-
-and persists:
-
-- `acknowledgedAt`
-- `ackSyncState = PENDING`
-
-Phase 4 consumes that durable `PENDING` state and adds eventual remote synchronization:
+Phase 5 changes the inbound alert transport from:
 
 ```text
-explicit Visto
-    ↓
-Room local ACK = durable immediately
-    ↓
-ackSyncState = PENDING
-    ↓
-unique WorkManager drain
-    ↓
-HTTPS over private Tailscale path
-    ↓
-Mac ACK endpoint
-    ↓
-Hermes notification state
-    ↓
-Ackline ackSyncState = SYNCED
+Hermes/test sender
+→ plaintext FCM data payload
+→ Ackline parser
+→ Room
 ```
 
-Remote availability must never undo, delay, or block the local `Vista` transition.
+to:
+
+```text
+Hermes/test sender
+→ encrypt complete inner alert payload
+→ FCM sees encrypted envelope only
+→ Ackline receive boundary
+→ authenticated decrypt
+→ existing inner payload parser
+→ Room
+```
+
+Phase 5 is the privacy gate that must pass before real sensitive Personal Admin alert contents are allowed through FCM.
 
 ---
 
 ## Baseline Already Proven
 
 Phase 0:
-
 - Android project builds/installs on the physical Oppo.
 - Firebase/FID registration works.
-- Mac fake sender can target the device.
 
 Phase 1:
-
-- FCM data-only delivery works.
-- Foreground/background/removed-from-Recents delivery works.
-- Wi-Fi/mobile transitions recover without manually reopening Ackline.
-- Temporary offline recovery works.
-- Native severity channels work.
+- FCM transport passed the physical reliability gate.
+- Wi-Fi/mobile transitions do not require manually reopening Ackline.
 
 Phase 2:
-
 - Room is the device Inbox source of truth.
-- `notificationId` is the local idempotency key.
-- Alerts persist locally.
-- Duplicate FCM does not create duplicate rows or repost known alerts.
-- Inbox/Detail/Setup product baseline passed physical and visual QA.
+- Duplicate `notificationId` is harmless.
+- Inbox/Detail/Setup baseline passed.
 
 Phase 3:
+- `Visto` is explicit only.
+- Local acknowledgment is durable and idempotent.
 
-- explicit `Visto` is the only local ACK path;
-- notification action, Inbox action, and Detail action share one local ACK operation;
-- opening app/detail and swiping tray do not ACK;
-- Room v1 → v2 migration passed automated and physical upgrade QA;
-- `ackSyncState = PENDING` is durable;
-- repeated local ACK preserves the first timestamp;
-- duplicate FCM after ACK preserves `Vista`;
-- tray cancellation works;
-- Phase 3 passed final GitHub review and was merged to `dev`.
+Phase 4:
+- Room v3 stores durable remote ACK state.
+- `ackToken` is storage-only and does not enter the UI/domain `Alert`.
+- local `Vista` remains immediate.
+- WorkManager drains pending ACKs.
+- private HTTPS/Tailscale ACK to Hermes works.
+- offline ACK remains `PENDING`.
+- reconnect automatically reaches `SYNCED`.
+- startup recovery works after process restart.
+- permanent `403` becomes terminal `ERROR` without undoing local `Vista`.
+- duplicate remote ACK is idempotent.
+- Phase 4 passed automated, physical, independent, and final GitHub review and was merged to `dev`.
 
-Do not redesign those proven layers without a concrete Phase 4 requirement.
+Do not redesign those proven layers without a Phase 5 requirement.
 
 ---
 
-## Phase 4 Question
+## Phase 5 Security Question
 
 This phase must answer:
 
-> If I mark an alert `Visto` while Hermes/Tailscale/the Mac is unavailable, can Ackline preserve the local decision, retry safely later, and eventually synchronize exactly that ACK to Hermes without duplicates, tight retry loops, or user intervention?
+> Can Ackline receive a real Hermes alert through FCM without Firebase/FCM-visible data containing the alert title, message, notification ID, or ACK credential, while still authenticating the payload and preserving the existing Inbox/ACK behavior?
 
-The answer must be demonstrably yes.
-
----
-
-## Source-of-Truth Rules
-
-During Phase 4:
-
-- **Room** = device Inbox + local ACK + local ACK-sync state.
-- **Hermes notification SQLite/state layer** = server-side notification truth.
-- **FCM** = inbound alert transport only.
-- **Android tray** = presentation only.
-- **WorkManager** = durable deferred execution trigger, not state storage.
-- **Tailscale** = private ACK network path only; FCM push must remain independent of it.
-
-An ACK is locally valid even when remote synchronization has not happened yet.
+Required answer: **yes**.
 
 ---
 
-## Exact ACK Semantics
+## Threat Model
 
-Local acknowledgment remains unchanged from Phase 3.
+Phase 5 protects alert content against plaintext visibility in the FCM transport path.
 
-Only these actions locally acknowledge:
+Protected inside ciphertext:
 
-1. notification action `Visto`
-2. Inbox row action `Visto`
-3. Detail action `Marcar como visto`
-
-Remote synchronization happens **after** local persistence.
-
-Forbidden behavior:
-
-```text
-tap Visto
-    ↓
-wait for Mac/Tailscale
-    ↓
-only then show Vista
-```
-
-Required behavior:
-
-```text
-tap Visto
-    ↓
-persist Vista locally
-    ↓
-UI updates immediately
-    ↓
-remote sync happens independently
-```
-
----
-
-## Phase 4 ACK Sync States
-
-Extend the existing app-owned `AckSyncState`.
-
-Phase 4 values:
-
-- `NONE`
-- `PENDING`
-- `SYNCED`
-- `ERROR`
-
-Semantics:
-
-### NONE
-
-No local ACK exists.
-
-Expected invariant:
-
-`acknowledgedAt == null`
-
-### PENDING
-
-A local ACK exists and has not yet been confirmed by Hermes.
-
-Expected invariant:
-
-`acknowledgedAt != null`
-
-### SYNCED
-
-Hermes has idempotently accepted/confirmed the ACK.
-
-Expected invariant:
-
-`acknowledgedAt != null`
-
-### ERROR
-
-A non-transient remote problem was detected and automatic tight retry must stop.
-
-Examples:
-
-- malformed request/protocol mismatch;
-- authentication/authorization rejection if auth is used;
-- notification ID permanently unknown to Hermes;
-- other explicit non-retryable 4xx response.
-
-`ERROR` does **not** undo local `Vista`.
-
----
-
-## Database Version
-
-Current Phase 3 Room database version:
-
-`2`
-
-Phase 4 target:
-
-`3`
-
-Add only metadata justified by remote synchronization:
-
-- `ackSyncedAtEpochMillis: Long?`
-- `lastAckError: String?`
-- `ackToken: String?` (storage-only credential for the Hermes ACK request)
-
-`ackSyncState` already exists and must not be duplicated.
-
-Migration v2 → v3 must be non-destructive.
-
-Expected SQL shape:
-
-```sql
-ALTER TABLE alerts ADD COLUMN ackSyncedAtEpochMillis INTEGER;
-ALTER TABLE alerts ADD COLUMN lastAckError TEXT;
-ALTER TABLE alerts ADD COLUMN ackToken TEXT;
-```
-
-Existing rows retain their current `ackSyncState`.
-
-Existing `PENDING` rows are intentionally important: Phase 4 must be able to drain ACKs created before the Phase 4 worker existed.
-
-Keep exported schemas:
-
-- v1
-- v2
-- v3
-
-No destructive fallback.
-
----
-
-## Error Metadata Rule
-
-`lastAckError` is internal diagnostic state.
-
-Store only a small sanitized machine-readable category, for example:
-
-- `http_400`
-- `http_403`
-- `http_404`
 - `protocol`
-- `client_error`
+- `notification_id`
+- `level`
+- `title`
+- `message`
+- `created_at`
+- `ack_token` when present
 
-Do not store:
+FCM-visible metadata may still reveal:
 
-- bearer tokens;
-- full exception dumps;
-- response bodies containing unknown content;
-- personal notification text;
-- FID;
-- full private URLs if avoidable.
+- that a message was sent;
+- approximate message size;
+- target Firebase installation/device routing metadata;
+- transport timing;
+- Android FCM priority;
+- encryption envelope version;
+- non-secret key identifier (`kid`).
 
-Transient network failures may remain `PENDING`; WorkManager already owns retry timing.
+Phase 5 does **not** attempt to hide transport metadata.
+
+Phase 5 does **not** encrypt Room at rest. After authenticated decryption, the normal alert is stored in app-private Room as today. `android:allowBackup="false"` remains required.
 
 ---
 
-## Remote ACK Contract
+## Cryptographic Primitive
 
-The existing Hermes ACK server is authoritative. Reuse its contract:
+Use standard **AES-256-GCM**.
+
+Android transformation:
+
+```text
+AES/GCM/NoPadding
+```
+
+Parameters:
+
+```text
+key:   32 bytes / 256 bits
+nonce: 12 bytes / 96 bits
+tag:   128 bits
+```
+
+Every encryption must use a fresh cryptographically random nonce.
+
+Never reuse a nonce with the same key.
+
+Do not implement AES/GCM manually.
+
+---
+
+## Versioned Encrypted Envelope
+
+FCM remains a data-only message.
+
+Phase 5 outer data payload:
+
+```json
+{
+  "v": "1",
+  "kid": "device-1",
+  "nonce": "<base64url-no-padding>",
+  "ciphertext": "<base64url-no-padding ciphertext+GCM-tag>"
+}
+```
+
+These are the only Phase 5 alert-content fields that should be visible to FCM.
+
+The outer envelope must not contain:
+
+```text
+notification_id
+level
+title
+message
+created_at
+ack_token
+```
+
+`kid` is deployment metadata, not a secret.
+
+---
+
+## Inner Payload
+
+After authenticated decryption, plaintext is compact UTF-8 JSON using the existing logical alert protocol:
+
+```json
+{
+  "protocol": "1",
+  "notification_id": "...",
+  "level": "remember|important|urgent",
+  "title": "...",
+  "message": "...",
+  "created_at": "2026-08-30T00:00:00Z",
+  "ack_token": "..."
+}
+```
+
+`ack_token` remains optional at the inner parser boundary for compatibility/testing, but production ACK-capable alerts require it.
+
+Reuse the existing `IncomingAlertEnvelope` and `parseAcklinePayload()` after decryption rather than duplicating alert validation.
+
+---
+
+## Additional Authenticated Data
+
+Canonical Phase 5 AAD:
+
+```text
+ackline-e2ee|v=1|kid=<kid>
+```
+
+Encoding: UTF-8.
+
+Both Python sender and Android decryptor must construct the exact same bytes.
+
+Changing `v` or `kid` must cause authentication/decryption failure.
+
+---
+
+## Encoding
+
+Use URL-safe Base64 without padding for:
+
+- nonce
+- ciphertext
+
+Decoder must reject malformed Base64 safely.
+
+---
+
+## `kid`
+
+`kid` identifies the expected payload-encryption key.
+
+Phase 5 MVP remains one user / one phone / one active key.
+
+Requirements:
+
+- `kid` is not secret;
+- validate it as a bounded simple identifier;
+- unknown `kid` fails closed;
+- do not guess/fallback to another key;
+- future rotation can add a new key without changing envelope v1.
+
+Planning identifier shape:
+
+```text
+[A-Za-z0-9._-]{1,64}
+```
+
+Preflight must confirm the exact deployment mechanism.
+
+---
+
+## Mac Key
+
+Preferred file:
+
+```text
+~/.hermes/secrets/hermes-notify.key
+```
+
+Contents:
+
+```text
+exactly 32 random bytes
+```
+
+Permissions:
+
+```text
+0600
+```
+
+The key must never be:
+
+- committed;
+- printed;
+- pasted into prompts;
+- passed as a normal command-line argument;
+- logged;
+- stored in `device.json` as plaintext;
+- included in FCM.
+
+Generate with a CSPRNG. Do not derive from a human password.
+
+---
+
+## Android Key Storage
+
+The shared AES key must end in `AndroidKeyStore`.
+
+Use an imported AES `SecretKey` protected by Android Keystore policy.
+
+Target authorization:
+
+```text
+PURPOSE_DECRYPT
+BLOCK_MODE_GCM
+ENCRYPTION_PADDING_NONE
+```
+
+Do not require biometric/user authentication for every decrypt because background notifications must decrypt while the phone is locked.
+
+Do not require StrongBox as an MVP prerequisite.
+
+The raw key must not remain in SharedPreferences, Room, BuildConfig, resources, or normal app files after successful import.
+
+---
+
+## Key Provisioning
+
+Preferred MVP direction:
+
+```text
+Mac 32-byte key file
+→ local USB/ADB-only staging into Ackline app-private storage
+→ Ackline imports key into AndroidKeyStore
+→ staging file deleted
+```
+
+This avoids clipboard/paste, QR/camera dependencies, public-network provisioning, and hardcoded secrets.
+
+The approved one-time provisioning command is:
+
+```sh
+adb shell -T \
+  'run-as com.edu.ackline sh -c "umask 077; mkdir -p files; dd of=files/.e2ee_staging.bin bs=32 count=1 2>/dev/null"' \
+  < ~/.hermes/secrets/hermes-notify.key
+```
+
+**Why this form:**
+
+- `run-as` resolves the correct app sandbox instead of hardcoding `/data/data` vs `/data/user/0`.
+- `mkdir -p files` handles a fresh installation where `files/` does not yet exist.
+- `-T` disables PTY allocation, preventing interactive hang on some devices.
+- Key bytes are supplied only via stdin.
+- `dd bs=32 count=1` reads exactly the 32-byte AES-256 key and terminates deterministically instead of depending on EOF behavior.
+- `umask 077` keeps staging permissions restrictive.
+- No key material is printed or supplied in argv.
+- Ackline deletes `.e2ee_staging.bin` after the import attempt.
+
+The previous `adb exec-out` form was physically validated but could hang waiting for EOF on certain devices. The `dd`-based command terminates deterministically.
+
+Normal process restart, device reboot, and app update/install-replace do not normally require re-provisioning because the Keystore entry persists. App uninstall removes the app Keystore namespace, so uninstall/reinstall requires re-provisioning.
+
+Do not fall back to putting the key in source or `local.properties`.
+
+---
+
+## Key Import State
+
+The app should distinguish:
+
+```text
+NOT_CONFIGURED
+READY
+```
+
+A minimal Setup status such as:
+
+```text
+Cifrado: Listo
+```
+
+or:
+
+```text
+Cifrado: No configurado
+```
+
+is acceptable.
+
+Never display/copy raw key material.
+
+---
+
+## Missing Key Behavior
+
+If an encrypted FCM envelope arrives before the matching key is provisioned:
+
+- fail closed;
+- do not persist ciphertext as an Alert;
+- do not display title/message;
+- do not fabricate a plaintext fallback;
+- do not crash;
+- record only sanitized diagnostics where useful.
+
+Phase 5 acceptance requires provisioning before real sensitive traffic.
+
+Recovery of a missed alert because the key was absent belongs to Phase 7 reconciliation, not polling here.
+
+---
+
+## Plaintext FCM Behavior After Phase 5
+
+The external FCM receive path becomes encrypted-only.
+
+A legacy plaintext data payload containing:
+
+```text
+protocol
+notification_id
+level
+title
+message
+created_at
+```
+
+must not be accepted as a normal incoming alert after Phase 5.
+
+The inner plaintext parser remains reusable **after decryption**.
+
+Do not add an implicit decrypt-failed → plaintext fallback.
+
+---
+
+## Receive Flow
+
+```text
+FirebaseMessagingService.onMessageReceived()
+→ parse encrypted outer envelope
+→ validate v/kid/nonce/ciphertext bounds
+→ resolve AndroidKeyStore key
+→ AES-GCM authenticated decrypt with canonical AAD
+→ decode UTF-8 inner JSON
+→ map to existing inner payload fields
+→ existing parseAcklinePayload()
+→ Room INSERT IGNORE
+→ native notification
+```
+
+Persist-before-presentation remains unchanged.
+
+Decryption/parsing stays short and bounded in the existing FCM worker-thread callback.
+
+No WorkManager is needed for decryption.
+
+---
+
+## Authentication Failure
+
+These fail safely:
+
+- wrong key;
+- tampered ciphertext/tag;
+- tampered nonce;
+- tampered `v`/`kid` through AAD;
+- malformed Base64;
+- wrong nonce length;
+- unknown key ID;
+- invalid inner UTF-8/JSON;
+- invalid inner alert protocol.
+
+Result:
+
+```text
+no Room insert
+no native alert
+no crash
+no plaintext logging
+```
+
+Do not create detailed user-visible cryptographic error oracles.
+
+---
+
+## Payload Size
+
+Encryption + tag + Base64 add overhead to the FCM payload.
+
+Phase 5 must define a conservative maximum inner plaintext size and reject oversize before FCM send.
+
+Planning target:
+
+```text
+~2500 UTF-8 bytes maximum compact inner JSON
+```
+
+Preflight must calculate/confirm a safe bound against the actual four-field envelope and FCM limit.
+
+---
+
+## Sender Tooling
+
+Phase 5 may update the development sender so fake/non-sensitive alerts are encrypted before FCM.
+
+Preferred local inputs:
+
+```text
+ACKLINE_E2EE_KEY_FILE
+ACKLINE_E2EE_KID
+ACKLINE_ACK_TOKEN
+```
+
+Rules:
+
+- key bytes are read from file, never printed;
+- `ACKLINE_ACK_TOKEN`, when present, goes inside encrypted inner JSON;
+- sender output may print non-secret notification metadata as today;
+- sender must never print key or plaintext payload;
+- no production Hermes outbox integration yet.
+
+Phase 6 still owns routing the actual Hermes persistent outbox through the final encrypted sender.
+
+---
+
+## Python Crypto
+
+Preferred:
+
+```text
+cryptography.hazmat.primitives.ciphers.aead.AESGCM
+```
+
+Use the current environment only if its `cryptography` and Python versions are appropriate.
+
+Do not implement AES-GCM directly.
+
+---
+
+## Android Crypto Dependencies
+
+Prefer platform JCA/JCE + AndroidKeyStore:
+
+```text
+Cipher
+GCMParameterSpec
+KeyStore
+KeyProtection
+SecretKeySpec during import only
+```
+
+Do not add a crypto SDK unless preflight finds a concrete blocker.
+
+No Tink dependency by default.
+
+---
+
+## Room
+
+Phase 5 should not require a Room migration.
+
+Expected DB version remains `3`.
+
+If implementation proposes v4 solely for crypto bookkeeping, stop and justify it before changing schema.
+
+---
+
+## ACK Compatibility
+
+Phase 4 remote ACK remains unchanged.
+
+The transport difference is only:
+
+```text
+ackToken plaintext in FCM
+```
+
+becomes:
+
+```text
+ackToken inside encrypted inner payload
+```
+
+After decryption:
+
+```text
+IncomingAlertEnvelope.ackToken
+→ AlertEntity.ackToken
+→ PendingAcknowledgment
+→ AckRemoteClient
+```
+
+No change to:
 
 ```text
 POST /ack/<notification_id>
-X-Ack-Token: <per-notification token>
+X-Ack-Token
 ```
 
-There is no request body. Android must safely encode the notification ID path
-segment and must not set or spoof `Tailscale-User-Login`; Tailscale Serve
-injects that identity header on the private route.
+---
 
-Only ACK metadata is sent. No alert title/message is required.
+## No Sensitive Production Traffic Yet
 
-### Success
+During implementation and QA:
 
-A newly acknowledged Hermes notification and an already-acknowledged Hermes notification must both be treated idempotently as success.
+- fake/non-sensitive contents only;
+- dedicated test key is acceptable;
+- never paste real key material into AI/cloud tools;
+- never expose real `ack_token` values in reports/screenshots.
 
-Actual success response:
-
-`200 OK`
-
-### Permanent client errors
-
-Examples:
-
-- `400` invalid request/route;
-- `403` invalid/missing ACK token or missing Tailscale identity;
-- `404` notification ID does not exist.
-
-These must not enter a tight automatic retry loop.
-
-### Transient errors
-
-Examples:
-
-- DNS/connect/TLS/timeout;
-- Tailscale unavailable;
-- Mac asleep/unreachable;
-- `408`;
-- `429`;
-- `5xx`.
-
-These remain retryable.
-
-The approved preflight confirmed the existing Hermes notification-state ACK
-operation and server contract. Android does not duplicate that server state
-layer.
+Only after Phase 5 final PASS may real sensitive Hermes payloads be considered for Phase 6 integration.
 
 ---
 
-## Mac / Tailscale Boundary
+## Mandatory Tests
 
-Preferred deployment shape:
+### Outer envelope
+- valid v1;
+- missing/unsupported fields;
+- invalid `kid`;
+- malformed Base64;
+- nonce != 12 bytes;
+- oversize rejection.
 
-```text
-Android
-    ↓ HTTPS
-private Tailscale hostname
-    ↓
-Tailscale Serve / private tailnet route
-    ↓
-127.0.0.1 Mac ACK endpoint
-    ↓
-existing Hermes notification-state layer
-    ↓
-Hermes SQLite
-```
+### Crypto
+- known AES-256-GCM vector;
+- Python-generated vector decrypts through Android/JCA;
+- wrong key;
+- tampered ciphertext/tag;
+- wrong nonce;
+- changed AAD;
+- no failed payload reaches inner parser/Room.
 
-Preferred properties:
+### Key storage
+- 32-byte key imports into AndroidKeyStore;
+- key decrypts;
+- key material is not exportable through normal `getEncoded()` after import;
+- wrong-sized import rejected;
+- staging file removed after successful import;
+- app restart preserves key.
 
-- ACK server binds to loopback, not public interfaces.
-- No Tailscale Funnel/public exposure.
-- HTTPS terminates through the approved private Tailscale path.
-- Do not add public cloud infrastructure.
-- Do not make inbound FCM delivery depend on Tailscale.
+### Inner protocol
+- encrypted payload reuses existing parser;
+- `ack_token` reaches storage boundary;
+- plaintext FCM rejected;
+- duplicate encrypted delivery remains INSERT IGNORE.
 
-If the actual environment differs, the preflight must document it before implementation.
-
----
-
-## Server-Side Idempotency
-
-The Hermes-side ACK transition must be idempotent.
-
-First request:
-
-- identify notification by `notification_id`;
-- persist acknowledged state/timestamp using the existing Hermes notification-state layer;
-- return success.
-
-Repeated request for the same already-acknowledged notification:
-
-- do not duplicate records;
-- do not corrupt state;
-- do not replace an authoritative first ACK timestamp unless the existing Hermes semantics explicitly require otherwise;
-- return the same success class.
-
-Unknown ID:
-
-- do not create a phantom notification;
-- return a permanent client error such as `404`.
-
-Do not create a second parallel server database just for Ackline if Hermes already has authoritative notification state.
+### Sender
+- outer data contains only `v`, `kid`, `nonce`, `ciphertext`;
+- no private inner field outside ciphertext;
+- nonce fresh per encryption;
+- bad key size rejected;
+- oversize rejected;
+- secrets never printed.
 
 ---
 
-## WorkManager Strategy
+## Cross-Language Test Vector
 
-Use WorkManager for durable deferred ACK synchronization.
+Create at least one deterministic test vector with:
 
-Current official stable WorkManager selected for Phase 4:
+- fixed 32-byte **test** key;
+- fixed 12-byte **test** nonce;
+- fixed `kid`;
+- fixed AAD;
+- fixed fake compact inner JSON;
+- expected Base64URL ciphertext.
 
-`androidx.work:work-runtime:2.11.2`
+The fixed nonce is **test-only**.
 
-Preflight must verify the resolved dependency graph before editing.
-
-Use one unique one-time drain worker conceptually:
-
-`AckSyncWorker`
-
-Unique work name conceptually:
-
-`ackline-ack-sync`
-
-Use `ExistingWorkPolicy.APPEND_OR_REPLACE`. `KEEP` is unsafe for the local
-ACK scheduling path: a worker can read its current backlog, a new local ACK
-can become pending while it is running, and `KEEP` would ignore the enqueue
-request after the old worker exits. Appending a successor preserves the
-drain trigger without creating a worker per alert.
-
-The worker drains Room rows with:
-
-`ackSyncState = PENDING`
-
-Do **not** create one permanent worker chain per alert.
-
-Do **not** add periodic polling.
+Production sender always generates a fresh random nonce.
 
 ---
 
-## Scheduling Rule
+## Physical QA
 
-After a newly successful local ACK:
+Mandatory on Oppo, fake/non-sensitive only.
 
-1. Room transition to `PENDING` completes.
-2. Enqueue the unique ACK drain work.
-3. Local UI remains `Vista` regardless of enqueue/network outcome.
+### Provisioning
+- stage/import test key;
+- verify Setup encryption ready;
+- restart app;
+- key remains ready.
 
-There is an unavoidable cross-database boundary between Room and WorkManager. Therefore Phase 4 must also provide a recovery trigger.
+### Valid encrypted alert
+- encrypted IMPORTANT arrives;
+- decrypts;
+- persists;
+- native notification and Inbox show expected local plaintext.
 
-Required recovery rule:
+### ACK regression
+- encrypted payload includes ACK credential;
+- explicit `Visto`;
+- Phase 4 remote ACK still reaches `SYNCED`.
 
-- on normal Ackline process startup, enqueue the same unique drain work;
-- the worker exits successfully when there is no pending ACK.
+### Tamper
+- modified ciphertext/tag is rejected;
+- no row/tray.
 
-This closes the practical crash window:
+### Wrong key
+- sender uses wrong key with expected `kid`;
+- reject safely.
 
-```text
-Room ACK persisted
-↓
-process dies before WorkManager enqueue
-↓
-next app process start
-↓
-unique drain is enqueued
-↓
-PENDING ACK is recovered
-```
+### Plaintext rejection
+- legacy Phase 4 plaintext FCM payload creates no row/tray.
 
-This is not periodic polling.
+### Background
+- encrypted alert arrives/decrypts while Ackline is backgrounded.
 
----
-
-## Work Constraints and Backoff
-
-Required:
-
-- one-time work;
-- unique work;
-- `NetworkType.CONNECTED`;
-- exponential backoff;
-- a non-aggressive initial backoff such as 30 seconds.
-
-Important:
-
-Tailscale being off may still satisfy Android's generic `CONNECTED` constraint.
-
-That is expected.
-
-The worker attempts the private ACK endpoint, receives a connection/network failure, and returns retryable work.
-
-Do not attempt to model Tailscale as a custom permanent socket or foreground service.
-
----
-
-## Drain Semantics
-
-The worker must read the durable backlog from Room.
-
-For each pending ACK:
-
-1. send `notification_id` + original local `acknowledged_at`;
-2. classify the result;
-3. on remote success:
-   - set `ackSyncState = SYNCED`;
-   - set `ackSyncedAtEpochMillis`;
-   - clear `lastAckError`;
-4. on transient failure:
-   - leave local alert `Vista`;
-   - leave sync state retryable;
-5. on permanent failure:
-   - set `ackSyncState = ERROR`;
-   - store sanitized error category;
-   - continue safely without a tight retry loop.
-
-A duplicate network request must be safe because the server contract is idempotent.
-
-The worker must never send title/message merely to acknowledge an alert.
-
----
-
-## Worker Result Rule
-
-The exact implementation is a preflight decision, but the behavior must satisfy:
-
-- if every pending ACK is synchronized or permanently classified → worker can finish successfully;
-- if one or more retryable failures remain → worker returns retry;
-- a permanent error for one row must not permanently block unrelated ACK rows;
-- an exception must not silently mark an ACK `SYNCED`.
-
----
-
-## Android Networking
-
-Prefer the smallest maintainable HTTPS client.
-
-Preflight must compare:
-
-1. platform `HttpsURLConnection`, or
-2. one focused HTTP dependency if it materially improves correctness/testing.
-
-Do not add Retrofit just for one endpoint.
-
-Do not add a generic API layer.
-
-Required client behavior:
-
-- explicit connect timeout;
-- explicit read timeout;
-- POST with no request body;
-- `X-Ack-Token` header only;
-- no secret/response-body logging;
-- strict status classification;
-- close streams/connections correctly.
-
----
-
-## Endpoint Configuration
-
-Do not hardcode user-specific private Tailscale hostnames into source unless explicitly approved.
-
-Preferred dev configuration:
-
-- local untracked build configuration (`local.properties`) or another repo-safe mechanism;
-- produce one app-readable ACK base URL;
-- never commit private credentials.
-
-If the local ACK base URL is absent or blank, the sync runner treats the
-deployment as `NotConfigured`: it makes no HTTP request, leaves the row
-`PENDING`, preserves its local acknowledgment timestamp, records no error, and
-does not request an immediate retry solely because configuration is absent. A
-later correctly configured build recovers pending rows through the normal
-startup drain. This is distinct from a missing per-alert `ackToken`, which is a
-terminal `ERROR/missing_ack_token` condition.
-
-Preflight must inspect the existing Gradle/property pattern before choosing the exact implementation.
-
-If app-layer ACK authentication is already required by the Hermes environment, preflight must define secure provisioning before implementation.
-
-Do not invent a new token scheme without evidence.
-
----
-
-## Application Wiring
-
-Keep manual wiring.
-
-Expected Phase 4 concepts:
-
-- `AckRemoteClient`
-- narrow production HTTP implementation
-- `AckSyncRunner` or equally narrow ACK-specific orchestration
-- `AckSyncScheduler`
-- `AckSyncWorker`
-
-`AcklineApplication` may own the non-Worker collaborators.
-
-The Worker may resolve the app-owned dependencies from `applicationContext as AcklineApplication`.
-
-Do not add:
-
-- Hilt;
-- Koin;
-- generic service locator;
-- Retrofit framework stack unless explicitly justified;
-- multi-module architecture.
-
----
-
-## UI Scope
-
-Default Phase 4 UI behavior remains the accepted Phase 3 product:
-
-- local `Vista` is immediate;
-- Inbox remains uncluttered;
-- normal pending/synced transport details stay internal.
-
-Do not turn Inbox or Setup into an operations dashboard.
-
-If preflight identifies a product-critical need to expose permanent `ERROR`, propose the smallest possible Detail/Setup affordance and require approval before implementing it.
-
-Otherwise Phase 4 has no visual redesign.
-
----
-
-## Phase 4 Tests
-
-Mandatory Android automated coverage:
-
-### Room v2 → v3 migration
-
-Prove:
-
-- v2 row survives;
-- `ackSyncState` survives;
-- new nullable fields exist;
-- pending ACK remains pending;
-- no destructive migration.
-
-### DAO/repository
-
-Prove:
-
-- query returns pending ACK metadata needed by worker;
-- remote success → `SYNCED` + sync timestamp + cleared error;
-- permanent failure → `ERROR` + sanitized error;
-- local `acknowledgedAt` never changes during remote synchronization;
-- `Vista` remains `Vista` on remote failure.
-
-### Sync orchestration
-
-Using a fake ACK client, prove:
-
-- success drains pending;
-- already-remote-ack success is treated as success;
-- transient error remains retryable;
-- permanent error does not request tight retry;
-- one failed row does not corrupt another row.
-
-### Worker scheduling
-
-At minimum verify:
-
-- unique work;
-- network constraint;
-- backoff policy;
-- startup recovery enqueue.
-
-Use WorkManager test tooling only if it gives meaningful deterministic coverage without architecture inflation.
-
-Hermes-owned server tests cover the already-existing contract:
-
-- valid first ACK with `X-Ack-Token` → `200`;
-- repeated ACK → `200` without duplicate state mutation;
-- unknown ID → `404`;
-- invalid/missing token or Tailscale identity → `403`.
-
-Ackline-owned sender validation covers optional token inclusion without
-printing or logging the token.
-
----
-
-## Phase 4 Physical QA
-
-Use fake/non-sensitive alerts only.
-
-Required:
-
-### Online ACK
-
-Tailscale + Mac endpoint reachable:
-
-- receive alert;
-- tap explicit `Visto`;
-- UI becomes `Vista` immediately;
-- Hermes server state becomes acknowledged;
-- local sync state eventually becomes `SYNCED`.
-
-### Tailscale unavailable
-
-- make ACK path unreachable;
-- tap `Visto`;
-- local state becomes/stays `Vista`;
-- app remains usable;
-- remote sync remains pending/retryable;
-- no crash or spinner waiting for server.
-
-### Recovery
-
-- restore Tailscale/Mac endpoint;
-- without re-acknowledging the alert, pending ACK eventually synchronizes.
-
-### Process restart while pending
-
-- create pending remote ACK;
-- terminate/restart app process;
-- local `Vista` remains;
-- startup recovery enqueues drain;
-- remote sync eventually succeeds when endpoint is reachable.
-
-### Duplicate remote ACK
-
-- cause/replay same ACK more than once;
-- Hermes state remains correct;
-- local state remains one `Vista`;
-- no duplicate record/timestamp corruption.
-
-### Permanent client error
-
-- controlled fake endpoint response;
-- no aggressive infinite retry loop;
-- local `Vista` remains valid.
+No full Phase 1 matrix unless a regression appears.
 
 ---
 
 ## Explicit Out of Scope
 
-Phase 4 does **not** implement:
+Phase 5 does **not** implement:
 
-- FCM sender integration into the real Hermes outbox;
-- replacement/removal of ntfy;
-- E2EE;
-- reconciliation / `GET /notifications/pending`;
-- `onDeletedMessages()` recovery;
-- periodic background polling;
-- multi-device ACK fanout;
+- production Hermes outbox → FCM integration;
+- ntfy removal;
+- recovery/reconciliation;
+- periodic sync;
+- multi-device key management;
+- automatic key rotation service;
 - accounts/login;
+- cloud key server;
+- QR/camera pairing unless ADB provisioning is impossible and separately approved;
+- Room/database encryption;
+- biometric-gated notification decryption;
 - public backend;
-- Hermes Gmail/Calendar/Tasks logic;
-- Android Personal Admin logic;
-- search;
-- analytics;
-- notification UI redesign;
-- Tailscale battery hacks;
-- foreground sockets/services.
-
-Phase 6 still owns real Hermes outbound FCM sender/outbox integration.
-
-Phase 7 still owns reconciliation.
-
----
-
-## Dependencies
-
-Expected new runtime dependency:
-
-- WorkManager stable runtime (`2.11.2`).
-
-Possible test-only dependency:
-
-- WorkManager testing artifact if justified.
-
-No new runtime dependency should be added merely for JSON or DI without demonstrated need.
-
-Keep existing Room/Lifecycle/Firebase/Compose versions unless a concrete blocker requires a change.
-
----
-
-## Privacy Gate
-
-Phase 5 E2EE has not happened yet.
-
-Therefore all Phase 4 end-to-end payloads remain fake/non-sensitive.
-
-ACK requests contain only:
-
-- notification ID in the URL path;
-- the per-notification `X-Ack-Token` header.
-
-The Room sync projection also retains the original local acknowledgment
-timestamp for durable local state, but the current Hermes endpoint does not
-send that timestamp over HTTP. `ackToken` is never mapped into the `Alert`
-UI/domain model or exposed to Compose.
-
-Phase 5 E2EE must protect the eventual production inner payload, including
-ACK credential material, before real sensitive Hermes traffic is enabled.
-
-Do not send title/message back to Hermes as part of ACK.
+- UI redesign;
+- Firebase Auth/Firestore/Functions;
+- chat with Hermes.
 
 ---
 
 ## Acceptance Gate
 
-Phase 4 passes only when all are true:
-
 ```text
-local Visto still immediate                 PASS
-Room v2 → v3 migration                      PASS
-ACK online                                  PASS
-ACK idempotent server-side                  PASS
-Tailscale/Mac unavailable preserves Vista   PASS
-pending ACK survives restart                PASS
-unique WorkManager drain retries            PASS
-restore path eventually syncs               PASS
-permanent error avoids tight loop           PASS
-no title/message in ACK request              PASS
-no secret leakage                            PASS
-Phase 1–3 core behavior not broken           PASS
+AES-256-GCM standard implementation          PASS
+32-byte key generated/stored safely          PASS
+AndroidKeyStore import                       PASS
+FCM outer envelope contains no private data  PASS
+valid encrypted alert decrypts               PASS
+tampered payload rejected                    PASS
+wrong key rejected                           PASS
+AAD tampering rejected                       PASS
+plaintext FCM alert rejected                 PASS
+duplicate delivery still harmless            PASS
+Phase 4 ACK path still works                 PASS
+key survives app restart                     PASS
+no key/token/plaintext leakage in logs       PASS
+physical Oppo QA                             PASS
+independent review                           PASS
 final GitHub review                          PASS
 ```
+
+Only after this gate may Phase 6 use real sensitive Hermes payloads.
 
 ---
 
 ## Suggested Commit
 
 ```text
-feat: add durable remote acknowledgment sync
+feat: encrypt notification payloads end to end
 ```
 
-User owns commit and push.
+User owns commit, push, and merge.

@@ -4,6 +4,11 @@ import argparse
 import os
 from datetime import datetime, timezone
 
+try:
+    from tools.payload_crypto import encrypt_inner_payload, load_key_file
+except ModuleNotFoundError:  # Allows `python tools/firebase_sender.py` locally.
+    from payload_crypto import encrypt_inner_payload, load_key_file
+
 FCM_PRIORITY_BY_LEVEL = {
     "remember": "normal",
     "important": "high",
@@ -11,8 +16,8 @@ FCM_PRIORITY_BY_LEVEL = {
 }
 
 
-def build_data(notification_id, level, title, message, created_at):
-    data = {
+def build_inner_payload(notification_id, level, title, message, created_at):
+    payload = {
         "protocol": "1",
         "notification_id": notification_id,
         "level": level,
@@ -23,15 +28,25 @@ def build_data(notification_id, level, title, message, created_at):
 
     ack_token = os.environ.get("ACKLINE_ACK_TOKEN")
     if ack_token:
-        data["ack_token"] = ack_token
+        payload["ack_token"] = ack_token
 
-    return data
+    return payload
+
+
+def build_data(notification_id, level, title, message, created_at):
+    key_path = os.environ.get("ACKLINE_E2EE_KEY_FILE")
+    kid = os.environ.get("ACKLINE_E2EE_KID")
+    if not key_path or not kid:
+        raise ValueError("ACKLINE_E2EE_KEY_FILE and ACKLINE_E2EE_KID are required")
+
+    return encrypt_inner_payload(
+        key=load_key_file(key_path),
+        kid=kid,
+        inner_payload=build_inner_payload(notification_id, level, title, message, created_at),
+    )
 
 
 def main():
-    import firebase_admin
-    from firebase_admin import messaging
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--fid", required=True)
     parser.add_argument("--id", default="phase2-test-001")
@@ -40,21 +55,25 @@ def main():
     parser.add_argument("--message", default="Non-sensitive Phase 2 test")
     args = parser.parse_args()
 
-    firebase_admin.initialize_app()
-
     created_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    data = build_data(
+        notification_id=args.id,
+        level=args.level,
+        title=args.title,
+        message=args.message,
+        created_at=created_at,
+    )
+
+    import firebase_admin
+    from firebase_admin import messaging
+
+    firebase_admin.initialize_app()
     priority = FCM_PRIORITY_BY_LEVEL[args.level]
 
     message = messaging.Message(
         fid=args.fid,
         android=messaging.AndroidConfig(priority=priority),
-        data=build_data(
-            notification_id=args.id,
-            level=args.level,
-            title=args.title,
-            message=args.message,
-            created_at=created_at,
-        ),
+        data=data,
     )
 
     response = messaging.send(message)

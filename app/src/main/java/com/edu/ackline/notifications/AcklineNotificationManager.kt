@@ -116,8 +116,7 @@ object AcklineNotificationManager {
             notificationManager.notify(notificationId.hashCode(), notification)
             Log.i(
                 TAG,
-                "notification posted: " +
-                    "notification_id=${notificationId.forDiagnosticLog()} level=$level",
+                "notification posted: level=$level",
             )
             true
         } catch (_: SecurityException) {
@@ -205,13 +204,7 @@ object AcklineNotificationManager {
         return notificationManager.areNotificationsEnabled()
     }
 
-    private fun String.forDiagnosticLog(): String =
-        take(MAX_DIAGNOSTIC_VALUE_LENGTH)
-            .replace('\n', ' ')
-            .replace('\r', ' ')
-
     private const val TAG = "AcklineNotifications"
-    private const val MAX_DIAGNOSTIC_VALUE_LENGTH = 128
     internal const val REMEMBER_CHANNEL_ID = "ackline_remember"
     internal const val IMPORTANT_CHANNEL_ID = "ackline_important"
     internal const val URGENT_CHANNEL_ID = "ackline_urgent"

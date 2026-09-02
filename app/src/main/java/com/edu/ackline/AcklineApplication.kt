@@ -10,6 +10,12 @@ import com.edu.ackline.ack.HttpsAckRemoteClient
 import com.edu.ackline.ack.LocalAcknowledgmentManager
 import com.edu.ackline.data.AlertRepository
 import com.edu.ackline.data.local.AcklineDatabase
+import com.edu.ackline.notifications.AcklineNotificationManager
+import com.edu.ackline.push.AlertIngestion
+import com.edu.ackline.recovery.HttpsRecoveryRemoteClient
+import com.edu.ackline.recovery.RecoveryRemoteClient
+import com.edu.ackline.recovery.RecoveryRunner
+import com.edu.ackline.recovery.RecoveryScheduler
 import com.edu.ackline.security.PayloadCrypto
 import com.edu.ackline.security.PayloadKeyStore
 import java.util.concurrent.ExecutorService
@@ -52,6 +58,38 @@ class AcklineApplication : Application() {
 
     internal val payloadCrypto: PayloadCrypto by lazy {
         PayloadCrypto(payloadKeyStore)
+    }
+
+    internal val alertIngestion: AlertIngestion by lazy {
+        AlertIngestion(
+            decrypt = payloadCrypto::decrypt,
+            insertIncoming = alertRepository::insertIncoming,
+            notificationPresenter = { envelope ->
+                AcklineNotificationManager.show(
+                    context = applicationContext,
+                    notificationId = envelope.notificationId,
+                    level = envelope.level,
+                    title = envelope.title,
+                    message = envelope.message,
+                )
+            },
+        )
+    }
+
+    internal val recoveryRemoteClient: RecoveryRemoteClient by lazy {
+        HttpsRecoveryRemoteClient(BuildConfig.ACK_BASE_URL)
+    }
+
+    internal val recoveryRunner: RecoveryRunner by lazy {
+        RecoveryRunner(
+            remoteClient = recoveryRemoteClient,
+            alertIngestion = alertIngestion,
+            enqueueAckSync = ackSyncScheduler::enqueue,
+        )
+    }
+
+    internal val recoveryScheduler: RecoveryScheduler by lazy {
+        RecoveryScheduler(this)
     }
 
     val acknowledgmentExecutor: ExecutorService by lazy {

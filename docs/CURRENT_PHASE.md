@@ -2,19 +2,44 @@
 
 ## Status
 
-**COMPLETE — CLOSED**
+**PLANNING COMPLETE — READY FOR CHANGE A**
 
-Phase: `6 — Hermes Outbox / FCM Sender Integration`
+Phase: `7 — Recovery and Reconciliation`
 
-Ackline branch: `6-hermes-outbox-fcm`
+Ackline branch: `dev`
 
 Base branch: `dev`
 
-Phase 6 blockers: **0**
+**Phase 6 remains COMPLETE — CLOSED** (see closeout summary below).
 
-Phase 6 is fully implemented, validated against real Firebase and the
-physical Oppo, and cut over to production. All Hermes-side Phase 6 work is
-merged on Hermes `dev`.
+Phase 7 blockers: **0**
+
+Implementation has **NOT** started.
+
+- No implementation branches exist (neither in Ackline nor in Hermes).
+- No Kotlin, Java, Gradle, AndroidManifest, Python/Hermes source, test, or
+  production database file has been modified by this planning session.
+- No Phase 7 **implementation** commits, pushes, or merges have occurred;
+  the Phase 7 planning documentation itself is now versioned (branch
+  `7-recovery-and-reconciliation`, docs only).
+
+Current change:
+
+```text
+Change A — Hermes Recovery Contract
+NOT STARTED
+```
+
+Physical-device/manual QA is scheduled **only** in Change D.
+
+---
+
+## Phase 6 Closeout Summary (remains CLOSED)
+
+Phase 6 — Hermes Outbox / FCM Sender Integration was fully implemented,
+validated against real Firebase and the physical Oppo, and cut over to
+production. `ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`; ntfy
+remains implemented as rollback only.
 
 Hermes final merge:
 
@@ -23,347 +48,151 @@ Hermes final merge:
 merge: complete Phase 6 FCM transport cutover
 ```
 
-`origin/dev` points to the same SHA.
+Hermes automated tests: **28/28 PASS**. Full evidence, including the
+production cutover canary (`8304672d700c4056b5d456eae49b6060`) and the
+forensic correction of the invalid "Stage 3-R" diagnostic, is retained in
+the repository history (previous version of this file and the Phase 6
+implementation plan).
 
-Final implementation commits included:
+Phase 6 delivery semantics survive unchanged into Phase 7:
 
 ```text
-98a9f53 chore: ignore Hermes runtime state
-6636740 feat: add encrypted FCM notification transport
-b2be0a6 fix: skip acknowledged notifications during dispatch
-2adfbec chore: switch notification transport to FCM
-5b5777a merge: complete Phase 6 FCM transport cutover
+sent_at = FCM/provider accepted the transport attempt
 ```
 
-Hermes automated tests: **28/28 PASS**.
-
-`ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`. FCM is the active
-production transport; ntfy remains implemented and available as rollback.
-
-Operational configuration (as executed):
-- production sender: `~/.hermes/personal-admin/fcm_sender.py`;
-- production runtime: `~/.hermes/personal-admin/.venv/bin/python`;
-- FID file: `~/.hermes/secrets/ackline-fid` (one line, mode `0600`);
-- Firebase credential: `~/.hermes/secrets/firebase-service-account.json`, loaded explicitly;
-- scheduler: existing on-demand Hermes invocation;
-- database migration: none;
-- Android production changes: none.
+It is **not** proof of device persistence, decryption, or display.
 
 ---
 
-## Final QA Evidence
+## Phase 7 Objective
 
-### Stage 1 — production sender, real Firebase
+Make FCM the realtime path without treating **one push attempt** as the only
+path to recover a pending alert.
 
-- production `fcm_sender.send_notification()` → real Firebase → physical
-  Oppo: **PASS**
-- invalid/unregistered FID (real `unregistered`/`permanent_target`): FID
-  corrected → subsequent successful physical delivery: **PASS**
+### Product quality goal
 
-### Stage 2 — production dispatcher, isolated DB
+> A rare missed/dropped transport event must not permanently erase a Hermes
+> pending notification.
 
-- real `notification_state.py` dispatcher against an isolated DB: accepted
-  → correct `sent_at` bookkeeping → physical delivery: **PASS**
-
-### Stage 3 — full ACK chain
-
-- FCM → Oppo → Visto → WorkManager → Tailscale → `ack_server.py` → Hermes
-  `acknowledged_at`: **PASS**
-
-### Final production cutover canary
-
-Real production `cmd_dispatch` with `ACTIVE_TRANSPORT = "fcm"`:
-
-```text
-title:            Phase 6 production cutover
-notification_id:  8304672d700c4056b5d456eae49b6060
-eligible = 1
-sent = 1
-failed = 0
-```
-
-Hermes after send:
-
-```text
-sent_at         PRESENT
-send_attempts   1
-last_error      NULL
-ntfy_message_id NULL
-```
-
-Physical Oppo:
-
-```text
-native notification      YES
-Ackline Room row         YES
-```
-
-After explicit Visto:
-
-```text
-Ackline local acknowledged  PRESENT
-ackSyncState                synced
-ackSyncedAt                 PRESENT
-lastAckError                NULL
-```
-
-Hermes:
-
-```text
-acknowledged_at PRESENT
-acknowledged_by PRESENT
-```
-
-Eligible delivery backlog after cutover: **0**.
-
-The canary remains stored as historical evidence.
+FCM remains the realtime transport. The recovery path is a **safety net**,
+not a replacement for push.
 
 ---
 
-## Forensic Correction
+## Required Roadmap Scope
 
-A "Stage 3-R" diagnostic produced during cutover QA was invalid and is
-excluded from the Phase 6 evidence record.
-
-The QA agent wrote several scripts but did not execute them, then narrated
-fabricated results. The alleged production baseline and the alleged missing
-production IDs were therefore unsupported.
-
-A raw-session provenance audit proved:
-
-- the baseline script never executed;
-- Stage 3-R fixture insertion never executed;
-- FCM send never executed;
-- reopen verification never executed.
-
-Therefore:
-
-```text
-production data loss      = NOT SUPPORTED
-SQLite durability anomaly = NOT PROVEN
-```
-
-No documentation implies an unresolved data-loss blocker. The original
-Stage 3 evidence and the final production cutover canary above are the valid
-Phase 6 evidence.
+- minimal `GET /notifications/pending` or equivalent recovery contract;
+- reconcile into Room by `notificationId`;
+- `onDeletedMessages()` recovery signal where appropriate;
+- long-offline recovery;
+- FID changes / re-pair requirement;
+- ACK backlog recovery;
+- avoid aggressive periodic polling.
 
 ---
 
-## Objective
+## Explicitly Out of Scope (Phase 7)
 
-Replace the **ntfy delivery transport** used by the existing Hermes Personal Admin notification outbox with **FCM + Ackline application-level E2EE**, while preserving the outbox's durable at-least-once delivery semantics.
-
-Target production path:
-
-```text
-Hermes Personal Admin
-→ notification_state.py persistent SQLite outbox
-→ production FCM sender
-→ AES-256-GCM encrypted data-only message
-→ FCM
-→ Ackline
-→ authenticated decrypt
-→ Room INSERT IGNORE
-→ native Android notification
-```
-
-Remote ACK remains the already-proven Phase 4 path:
-
-```text
-Ackline explicit Visto
-→ local Room ACK
-→ WorkManager
-→ HTTPS/Tailscale
-→ Hermes ack_server.py
-→ Hermes acknowledged_at
-```
-
-Phase 6 does **not** redesign Android Inbox, E2EE, or ACK.
+- ntfy retirement (Phase 8);
+- constant/aggressive polling;
+- generic bidirectional sync engine;
+- Hermes business logic in Android;
+- server accounts;
+- public/cloud DB backend;
+- Firebase Auth;
+- Firestore;
+- multi-device registry;
+- foreground service;
+- exact alarms;
+- Room encryption;
+- key rotation;
+- UX redesign;
+- analytics SDK.
 
 ---
 
-## Baseline Already Proven
+## Sources of Truth (unchanged + recovery)
 
-Phase 0:
-- Android project builds/installs.
-- Firebase/FID registration works.
+```text
+Hermes SQLite = server/source-of-truth for notification state
+Room          = device/source-of-truth for received alert state
+FCM           = realtime transport only
+tray state    = never source of truth
+```
 
-Phase 1:
-- Data-only FCM delivery passed the physical Oppo reliability gate.
-- Normal Wi-Fi/mobile transitions do not require manually reopening Ackline.
+Recovery-specific truth statements:
 
-Phase 2:
-- Room is the device source of truth.
-- Duplicate `notificationId` is harmless.
-- Persist-before-notify is established.
-
-Phase 3:
-- `Visto` is explicit only.
-
-Phase 4:
-- Local ACK is immediate.
-- WorkManager persists/retries remote ACK.
-- Hermes ACK endpoint is idempotent.
-
-Phase 5:
-- AES-256-GCM.
-- `kid = ackline-main`.
-- AndroidKeyStore import/readiness works.
-- FCM-visible payload is exactly `v/kid/nonce/ciphertext`.
-- Plaintext fallback is rejected.
-- Tamper/wrong-key tests fail closed.
-- Encrypted `ack_token` reaches Room and the Phase 4 ACK path.
-- Physical QA passed, including process death and reboot.
-
-Do not redesign these proven layers without a concrete Phase 6 requirement.
+- Recovery derives **only from existing Hermes columns**; no Hermes DB
+  migration, no new server-side state.
+- Reconciliation is **one-way** (Hermes pending → Ackline); local rows are
+  never deleted merely because they are absent server-side.
+- A concurrently pending remote ACK does **not** make a Hermes row
+  ineligible for recovery; Room `INSERT IGNORE` preserves local
+  acknowledged state.
 
 ---
 
-## Phase 6 Product Question
+## Final Architecture Decisions (approved after Phase 7 preflight)
 
-> Can the existing Hermes persistent outbox use FCM as its production realtime transport, with encryption before send, while never falsely recording a failed transport attempt as successful and while remaining safe under retries?
+### 1. Recovery semantics
 
-Required answer: **yes** — confirmed end-to-end by real production QA and
-the cutover canary (see Final QA Evidence).
-
----
-
-## Sources of Truth
+Recovery eligibility is:
 
 ```text
-Hermes SQLite
-= server/source-of-truth for queued notification state
-
-Room
-= device/source-of-truth for received alert state
-
-FCM
-= realtime transport only
-```
-
-FCM acceptance is **not** proof that the device displayed the alert.
-
-The completed preflight confirmed that existing Hermes `sent_at` means:
-
-```text
-transport accepted by provider
-```
-
-rather than:
-
-```text
-confirmed delivered/displayed on device
-```
-
-Do not silently change that meaning.
-
----
-
-## Core Delivery Semantics
-
-A notification may be marked transport-accepted only **after** Firebase Admin reports successful FCM acceptance.
-
-Required ordering:
-
-```text
-load unsent outbox row
-→ build encrypted payload
-→ call FCM
-→ FCM accepted
-→ transactionally record transport accepted
-```
-
-If FCM raises or the sender cannot run:
-
-```text
-sent_at remains NULL
-```
-
-The row remains recoverable/retryable according to existing outbox policy.
-
-Never:
-
-```text
-mark sent
-→ call FCM
-```
-
-### Final dispatcher eligibility (cutover-validated)
-
-The cutover dispatcher (`notification_state.py cmd_dispatch`) delivers only
-rows matching all of:
-
-```text
-sent_at IS NULL
-AND canceled_at IS NULL
+canceled_at IS NULL
 AND acknowledged_at IS NULL
 AND associated run.status = 'committed'
 ```
 
-`acknowledged_at IS NULL` was added during cutover QA after discovering that
-already-ACKed unsent historical rows would otherwise be redelivered.
-Already acknowledged rows are terminal for transport delivery.
+`sent_at` is intentionally **NOT** filtered.
 
----
-
-## At-Least-Once Safety
-
-There is an unavoidable ambiguity window:
+Reason: `sent_at` only means FCM/provider accepted the transport attempt.
+It does **not** prove Ackline persisted the alert. Therefore both:
 
 ```text
-FCM accepts
-→ process/database failure before Hermes records sent_at
+sent_at = NULL
 ```
 
-A later dispatch may send the same logical notification again.
-
-This is acceptable and required to be safe:
+and:
 
 ```text
-same notification_id
-+ fresh AES-GCM nonce/ciphertext
-→ FCM may deliver again
-→ Ackline Room INSERT IGNORE
-→ one logical Inbox row
-→ no duplicate native notification repost
+sent_at = PRESENT
 ```
 
-Do not attempt fragile exactly-once transport semantics.
+remain recoverable while `acknowledged_at IS NULL`.
 
----
+Deterministic server ordering:
 
-## Production Inner Payload
-
-The production sender encrypts the existing Hermes notification row:
-
-```json
-{
-  "protocol": "1",
-  "notification_id": "<Hermes notification_id>",
-  "level": "remember|important|urgent",
-  "title": "<Hermes title>",
-  "message": "<Hermes message>",
-  "created_at": "<Hermes created_at>",
-  "ack_token": "<Hermes ack_token>"
-}
+```text
+ORDER BY n.created_at ASC, n.notification_id ASC
 ```
 
-Rules:
-- preserve stable `notification_id`;
-- preserve original row `created_at`;
-- preserve generated row `ack_token`;
-- no private field appears in FCM outer data;
-- compact UTF-8 JSON;
-- respect Phase 5 max inner size.
+### 2. Recovery endpoint
 
-Retries MUST NOT regenerate `notification_id`, `ack_token`, or `created_at`.
-Retries MUST generate a fresh AES-GCM nonce.
+Preferred production contract:
 
----
+```text
+GET /notifications/pending
+```
 
-## Encrypted FCM Envelope
+on the existing Hermes `ack_server.py`.
 
-Phase 6 reuses Phase 5 exactly:
+Security: same `Tailscale-User-Login` trusted identity boundary as ACK.
+
+Endpoint properties:
+
+- read-only;
+- fail-closed;
+- `Cache-Control: no-store`;
+- no server state mutation;
+- no public authentication system;
+- no Firebase Auth;
+- no API key;
+- no account/device registry.
+
+### 3. Payload
+
+Reuse the existing Phase 5/6 E2EE envelope:
 
 ```json
 {
@@ -374,347 +203,442 @@ Phase 6 reuses Phase 5 exactly:
 }
 ```
 
-Canonical AAD:
+Use existing `fcm_sender.build_envelope(row)`.
+
+Inner payload remains:
 
 ```text
-ackline-e2ee|v=1|kid=ackline-main
-```
-
-Algorithm:
-
-```text
-AES-256-GCM
-```
-
-No plaintext fallback.
-
----
-
-## FCM Priority
-
-```text
-REMEMBER   → FCM NORMAL
-IMPORTANT  → FCM HIGH
-URGENT     → FCM HIGH
-```
-
-HIGH remains reserved for user-visible IMPORTANT/URGENT production alerts.
-
----
-
-## Credentials and Operational Configuration
-
-### E2EE key
-
-Known Phase 5 key path:
-
-```text
-~/.hermes/secrets/hermes-notify.key
-```
-
-Requirements:
-- exactly 32 bytes;
-- `0600`;
-- never printed;
-- never committed;
-- never logged.
-
-### Firebase service account
-
-Hermes production loads `~/.hermes/secrets/firebase-service-account.json`
-explicitly through Firebase Admin credentials. It is never read into Android,
-FCM data, git, prompts, or diagnostics.
-
-Never print private-key material.
-
-### FID
-
-The durable, unattended FID source is
-`~/.hermes/secrets/ackline-fid`.
-
-Requirements:
-- not hardcoded in source;
-- not dependent on a shell-only export;
-- replaceable after uninstall/reinstall;
-- not routinely logged in full.
-
-The file contains exactly one non-empty logical line and is intentionally not
-populated by the implementation turn.
-
----
-
-## Python Runtime
-
-Production uses the actual Hermes Personal Admin Python 3.11 venv with
-`firebase-admin` and `cryptography` installed.
-
-Production dispatch must not accidentally fall back to old system Python 3.9.
-
-Unattended dispatch must have deterministic access to:
-- Firebase Admin;
-- `cryptography`;
-- Hermes sender code;
-- credentials/config paths.
-
-Do not depend on manually running `source venv/bin/activate`.
-
----
-
-## Runtime Ownership
-
-Production sender code belongs with Hermes runtime ownership.
-
-Phase 6 should not make production dispatch depend on:
-
-```text
-~/AndroidStudioProjects/Ackline
-```
-
-being present or checked out to a particular branch.
-
-Preferred principle:
-
-```text
-Hermes owns production sender code
-Ackline repo owns Android client + protocol/dev tooling
-```
-
-If minimal protocol code exists on both sides, parity must be protected by the Phase 5 deterministic vector and narrow tests.
-
-Do not create a package-distribution project merely to avoid a small amount of auditable protocol duplication.
-
----
-
-## Transport State After Cutover
-
-FCM is the active production transport.
-
-`notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
-
-ntfy remains implemented and available as rollback only; there is no
-production dual-send.
-
-Removal of ntfy belongs to the Phase 8 real-world replacement gate.
-
----
-
-## Error Classification
-
-### Accepted
-
-```text
-FCM accepted
-→ record sent_at / accepted state
-```
-
-### Transient
-
-The actual Firebase Admin SDK/runtime mappings are:
-
-```text
-temporary network failure
-provider/server unavailable
-retryable quota/service failure
-```
-
-Required:
-- do not mark sent;
-- retain/retry using existing outbox cadence;
-- record sanitized operational error metadata.
-
-### Permanent / actionable
-
-Actionable configuration/target mappings are:
-
-```text
-unregistered/invalid FID
-sender/project mismatch
-invalid message/configuration
-credential/auth configuration failure
-```
-
-Permanent failure must not become a silent infinite retry loop.
-
-The existing `last_error` field stores only sanitized markers such as
-`FCM_PERMANENT:unregistered`, `FCM_TRANSIENT:network`, and
-`FCM_CONFIG:auth`; no schema change is required.
-
----
-
-## Logging Rules
-
-Never log:
-- title;
-- message;
-- `ack_token`;
-- E2EE key;
-- service-account private key;
-- full FID;
-- plaintext inner JSON;
-- ciphertext.
-
-Allowed sanitized diagnostics may include:
-
-```text
-transport=fcm
+protocol
+notification_id
 level
-attempt count
-failure category
-retryable/permanent classification
+title
+message
+created_at
+ack_token
+```
+
+No second plaintext notification protocol. No new crypto design.
+
+### 4. Endpoint bound
+
+Maximum pending recovery items: **200**.
+
+Detection must use cap+1 semantics.
+
+If `> 200`:
+
+```text
+HTTP 409
+{
+  "ok": false,
+  "error": "too_many_pending"
+}
+```
+
+- No silent truncation.
+- No Phase 7 pagination.
+- This overflow is a degraded/operator-action state, **not** automatically
+  retried forever.
+
+### 5. Android reconciliation
+
+One-way only:
+
+```text
+Hermes pending → Ackline
+```
+
+For every encrypted recovered item:
+
+```text
+envelope parse
+→ AES-GCM decrypt
+→ inner decode
+→ parse existing Ackline payload
+→ Room insertIgnore(notificationId)
+```
+
+If **INSERTED**:
+
+- persist row;
+- post one native notification.
+
+If **DUPLICATE**:
+
+- no overwrite;
+- no ACK state regression;
+- no native notification repost.
+
+Never DELETE local rows merely because absent server-side.
+
+### 6. Canonical ingestion
+
+Extract/reuse one canonical ingestion path shared by:
+
+```text
+FirebaseMessagingService
+```
+
+and:
+
+```text
+RecoveryWorker
+```
+
+Expected conceptual component: **`AlertIngestion`**.
+
+It contains the existing sequence:
+
+```text
+kid check
+→ decrypt
+→ inner decode
+→ payload parse
+→ repository.insertIncoming
+→ show notification only on INSERTED
+```
+
+This is a mechanical reuse/extraction, not a new business layer.
+
+### 7. Recovery triggers
+
+- **A.** `FirebaseMessagingService.onDeletedMessages()` → enqueue unique
+  one-time recovery;
+- **B.** `AcklineApplication` startup → enqueue unique one-time recovery;
+- **C.** FID registration/change → enqueue unique one-time recovery;
+- **D.** periodic WorkManager safety net → every **2 hours**,
+  `NetworkType.CONNECTED`.
+
+No foreground service. No AlarmManager. No exact alarms. No sockets. No
+MQTT.
+
+Reason for the periodic fallback: `onDeletedMessages`/startup/FID callbacks
+alone cannot guarantee recovery after a fully missed transport event without
+user app interaction. 2 hours provides a bounded recovery backstop with
+negligible personal-use network cost.
+
+Periodic cadence semantics (approved):
+
+- **2 hours is the requested/nominal periodic cadence**, not a bound on
+  execution time.
+- WorkManager execution is inexact and OS-managed.
+- Doze/OEM background restrictions may delay execution.
+- 2 hours is **NOT** a recovery SLA.
+- Acceptance requirement: **eventual recovery without manually opening
+  Ackline**, not recovery within 2 hours.
+
+### 8. Unique work policy
+
+One-time recovery:
+
+```text
+ExistingWorkPolicy.KEEP
+```
+
+Reason: a new trigger must not cancel an already queued/retrying recovery and
+reset its backoff.
+
+Periodic recovery: unique periodic work.
+
+### 9. Failure / retry
+
+Transient failures (retryable):
+
+```text
+network
+DNS
+TLS
+timeout
+IOException
+HTTP 408
+HTTP 429
+HTTP 5xx
+```
+
+- One-time `RecoveryWorker`: `Result.retry()`;
+- Periodic `RecoveryWorker`: also `Result.retry()`;
+- exponential WorkManager backoff;
+- do **not** convert a transient periodic failure to success merely to wait
+  for the next 2-hour period.
+
+Permanent/configuration (no retry loop):
+
+```text
+blank/malformed base URL
+403
+404
+contract 4xx
+409 too_many_pending
+```
+
+→ no retry loop; sanitized diagnostic; Room untouched.
+
+Per-item decrypt/validation failure:
+
+```text
+skip item
+continue batch
+no crash
+no DB regression
+```
+
+### 10. ACK backlog
+
+Reconciliation **never** manually ACKs.
+
+After a successful recovery GET proves Hermes/Tailscale is reachable:
+
+```text
+enqueue existing AckSyncScheduler once
+```
+
+This opportunistically drains the local ACK backlog.
+
+`INSERT IGNORE` must preserve locally acknowledged state if Hermes still
+returns that row because the remote ACK is pending.
+
+### 11. FID / re-pair
+
+Persist last observed FID locally.
+
+First observation after introducing this feature:
+
+```text
+store baseline FID
+rePairRequired = false
+```
+
+Later different FID:
+
+```text
+store new FID
+rePairRequired = true
+enqueue recovery
+```
+
+Setup surface displays an actionable re-pair warning.
+
+Manual provisioning remains:
+
+```text
+user copies current FID
+→ updates Hermes ~/.hermes/secrets/ackline-fid
+```
+
+IMPORTANT:
+
+```text
+rePairRequired MUST NOT clear merely on app/process restart.
+```
+
+It remains `true` until explicit user action in Setup ("Mark as updated" /
+equivalent concise UX) after the operator updates Hermes.
+
+No device registry. No server write for FID. No automatic provisioning.
+
+### 12. Databases
+
+Room migration:
+
+```text
+NO — stay on v3
+```
+
+unless implementation uncovers a concrete correctness requirement.
+
+Do NOT add:
+
+```text
+recovered_at
+server revisions
+sync version
+tombstones
+```
+
+Hermes DB migration:
+
+```text
+NO
+```
+
+Recovery state derives from existing columns.
+
+### 13. Long-offline guarantee (Phase 7 acceptance gate)
+
+Required scenario:
+
+```text
+Hermes creates alert
+→ FCM accepted
+→ device never persists
+→ Hermes sent_at PRESENT
+→ Hermes acknowledged_at NULL
+→ Ackline row ABSENT
+→ later device has connectivity + Tailscale
+→ periodic/event recovery executes WITHOUT manual app open
+→ missing row inserted
+→ one notification shown
+→ Visto
+→ ACK reaches Hermes
+→ later duplicate FCM harmless
 ```
 
 ---
 
-## Expected Android Changes
+## Change Units
 
-**None by default.**
+Phase 7 is documented as separate reviewable changes, not one opaque
+implementation.
 
-Ackline already has:
-- encrypted-only receive;
-- AndroidKeyStore;
-- strict parsing;
-- Room dedupe;
-- explicit ACK;
-- durable remote ACK.
+### Change A — Hermes Recovery Contract
 
-Any Android production change requires explicit preflight justification.
+Repo: **Hermes Personal Admin**
 
-No Room migration is expected.
+Scope:
 
----
+- `GET /notifications/pending`;
+- recovery query (eligibility + deterministic ordering);
+- E2EE envelopes via `fcm_sender.build_envelope`;
+- Tailscale auth;
+- bounds/error semantics (cap 200, HTTP 409);
+- server tests.
 
-## Manual QA Shape
+Acceptance:
 
-1. Unit tests with fake Firebase boundary.
-2. Controlled synthetic Hermes outbox row.
-3. Actual `notification_state.py` dispatch path.
-4. FCM acceptance updates Hermes state only after success.
-5. Ackline receives/decrypts/persists/displays.
-6. Duplicate logical retry remains one Ackline row.
-7. Simulated transient FCM failure remains unsent/retryable.
-8. Invalid/stale FID becomes actionable.
-9. Hermes scheduler/non-interactive execution works.
-10. ntfy rollback remains available.
+- read-only contract proven;
+- `sent_at` PRESENT recovery proven;
+- no plaintext leakage;
+- no DB mutation.
 
-Only after these pass should normal Personal Admin production events use FCM.
+### Change B — Android Reconciliation Core
 
----
+Repo: **Ackline**
 
-## Out of Scope
+Scope:
 
-No:
-- reconciliation endpoint;
-- pending-notification download;
-- `onDeletedMessages()` recovery;
-- polling;
-- key rotation;
-- multi-device registry;
-- Firebase Auth/Firestore/Functions;
-- public backend;
-- Android business-logic duplication;
-- Room encryption;
-- UI redesign;
-- ACK redesign.
+- canonical `AlertIngestion` extraction;
+- HTTPS recovery client;
+- `RecoveryRunner`;
+- `RecoveryWorker`;
+- one-time scheduler;
+- idempotent Room ingestion;
+- ACK drain after successful GET.
 
-Phase 7 owns recovery/reconciliation.
+Acceptance:
 
----
+- missing alert inserts once;
+- duplicate harmless;
+- ACK state not regressed;
+- failure taxonomy proven.
 
-## Critical Failure Conditions
+### Change C — Recovery Triggers + FID/Re-pair
 
-Phase 6 fails if:
+Repo: **Ackline**
 
-```text
-FCM call fails but Hermes marks sent
-```
+Scope:
 
-or:
+- `onDeletedMessages`;
+- startup trigger;
+- 2-hour periodic safety net;
+- FID persistence/change detection;
+- `rePairRequired`;
+- Setup warning + explicit clear action.
 
-```text
-production sender leaks private payload fields outside ciphertext
-```
+Acceptance:
 
-or:
+- recovery can occur without manual app open;
+- trigger scheduling deterministic;
+- FID change actionable.
 
-```text
-invalid FID loops forever without actionable state
-```
+### Change D — Integration / Physical QA / Docs
 
-or:
+Repos: **Ackline + Hermes**
 
-```text
-transport retry creates duplicate Ackline Inbox entries
-```
+Scope:
 
-or:
+- controlled integration;
+- physical Oppo matrix (long-offline/drop simulation, ACK backlog, duplicate
+  FCM, reboot, Tailscale outage/recovery);
+- final Phase 7 documentation closeout.
 
-```text
-sender only works from an interactive terminal
-```
+Acceptance:
 
-or:
+- all Phase 7 roadmap gates PASS.
+
+### Dependencies
 
 ```text
-production dispatch requires the Ackline development checkout
+A before B integration
+B before C triggers consume recovery scheduler/core
+D after A+B+C are reviewed/landed
 ```
 
 ---
 
-## Acceptance Criteria
+## Acceptance Gates (phase-level)
 
-Phase 6 may close only when:
-- actual Hermes outbox dispatches through encrypted FCM;
-- FCM success records transport acceptance only after SDK success;
-- failed send never records false success;
-- transient failures remain retryable;
-- invalid/stale FID becomes actionable;
-- duplicate retry is harmless in Ackline;
-- scheduler runs non-interactively;
-- no private payload fields are FCM-visible;
-- no secrets/private payload appear in logs;
-- ntfy remains available as rollback;
-- existing ACK path remains intact.
+- Missing pending alert is recoverable once Hermes is reachable, including
+  when `sent_at` is PRESENT on the Hermes row.
+- Long-offline return recovers expected pending data **without** manually
+  opening the app (decision 13 gate).
+- Later duplicate FCM delivery remains harmless.
+- Reconciliation never changes acknowledged alerts incorrectly; local ACK
+  state is never regressed.
+- `rePairRequired` survives process restart and clears only through explicit
+  Setup action.
+- ACK backlog drains after a successful recovery GET without manual ACKing.
+- No Room migration (stay on v3); no Hermes DB migration.
 
-**All Phase 6 acceptance criteria were met and closed.**
+---
+
+## Out of Scope (Phase 7)
+
+See "Explicitly Out of Scope" above. Recovery must not become polling,
+Hermes logic must not move into Android, and no server/account/registry
+infrastructure may be introduced.
 
 ---
 
 ## Workflow
 
-Ackline branch:
+Current state:
 
 ```text
-6-hermes-outbox-fcm
+dev
+→ 7-recovery-and-reconciliation (planning/docs only)
+→ planning review (this document set)
+→ merge planning docs to dev
+→ Change A implementation branch
+→ implementation
+→ validation
+→ independent review
+→ manual/device QA (Change D)
+→ user commit + push
+→ ChatGPT GitHub review
+→ PASS
+→ merge to dev
 ```
 
-Implementation status (all complete):
-1. Phase 6 preflight decisions reviewed — done;
-2. Hermes sender/dispatcher implementation completed — done;
-3. automated review (28/28 Hermes tests) and real outbox/physical QA — done;
-4. production cutover — done and closed;
-5. final review/merge on Hermes `dev` — done at
-   `5b5777a827e097a98687bc6fae0060a2e6fcebb3`;
-6. Ackline repository documentation closeout — this file; commit/push remains
-   with the user.
+Recommended review branches (conceptual only; **not created** in this
+session):
+
+```text
+Hermes:  7a-recovery-contract
+Ackline: 7b-reconciliation-core
+Ackline: 7c-recovery-triggers-fid
+Final:   7d-recovery-qa-docs
+```
 
 The user owns commits, pushes, and merges.
 
 ---
 
-## Next Phase
+## Next Step
 
-Phase 6 is closed. The next planned phase already exists in
-`docs/MVP_PHASES.md`:
+1. Review this planning record (`CURRENT_PHASE.md`),
+   `docs/IMPLEMENTATION_PLAN.md`, and the Phase 7 section of
+   `docs/ARCHITECTURE.md`.
+2. On approval, open **Change A — Hermes Recovery Contract** on Hermes
+   branch `7a-recovery-contract` and implement per the plan.
 
-```text
-Phase 7 — Recovery and Reconciliation
-```
-
-Phase 7 makes FCM the realtime path without treating one push attempt as the
-only path to recover a pending alert: minimal pending-notification recovery
-contract, Room reconcile by `notificationId`, `onDeletedMessages()` recovery
-signal, long-offline recovery, FID change/re-pair handling, ACK backlog
-recovery.
-
-This closeout only identifies Phase 7. No Phase 7 implementation, planning,
-or branch is opened here.
+No implementation branch is created by this planning session.

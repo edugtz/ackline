@@ -2,28 +2,150 @@
 
 ## Status
 
-**IMPLEMENTED — AUTOMATED REVIEW/QA PENDING**
+**COMPLETE — CLOSED**
 
-Phase: `6 — Hermes Outbox / Sender Integration`
+Phase: `6 — Hermes Outbox / FCM Sender Integration`
 
-Proposed Ackline branch: `6-hermes-outbox-fcm`
+Ackline branch: `6-hermes-outbox-fcm`
 
 Base branch: `dev`
 
-Phase 5 has been merged to `dev` and is the frozen privacy/reliability baseline for this phase.
+Phase 6 blockers: **0**
 
-The Phase 6 preflight decisions are approved and implemented on the Hermes
-`phase-6-fcm` branch. Real-FCM and physical QA remain pending.
+Phase 6 is fully implemented, validated against real Firebase and the
+physical Oppo, and cut over to production. All Hermes-side Phase 6 work is
+merged on Hermes `dev`.
 
-Approved operational decisions:
+Hermes final merge:
+
+```text
+5b5777a827e097a98687bc6fae0060a2e6fcebb3
+merge: complete Phase 6 FCM transport cutover
+```
+
+`origin/dev` points to the same SHA.
+
+Final implementation commits included:
+
+```text
+98a9f53 chore: ignore Hermes runtime state
+6636740 feat: add encrypted FCM notification transport
+b2be0a6 fix: skip acknowledged notifications during dispatch
+2adfbec chore: switch notification transport to FCM
+5b5777a merge: complete Phase 6 FCM transport cutover
+```
+
+Hermes automated tests: **28/28 PASS**.
+
+`ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`. FCM is the active
+production transport; ntfy remains implemented and available as rollback.
+
+Operational configuration (as executed):
 - production sender: `~/.hermes/personal-admin/fcm_sender.py`;
 - production runtime: `~/.hermes/personal-admin/.venv/bin/python`;
 - FID file: `~/.hermes/secrets/ackline-fid` (one line, mode `0600`);
 - Firebase credential: `~/.hermes/secrets/firebase-service-account.json`, loaded explicitly;
 - scheduler: existing on-demand Hermes invocation;
 - database migration: none;
-- Android production changes: none;
-- active implementation/QA transport default: `ntfy`; FCM is selected only for controlled QA.
+- Android production changes: none.
+
+---
+
+## Final QA Evidence
+
+### Stage 1 — production sender, real Firebase
+
+- production `fcm_sender.send_notification()` → real Firebase → physical
+  Oppo: **PASS**
+- invalid/unregistered FID (real `unregistered`/`permanent_target`): FID
+  corrected → subsequent successful physical delivery: **PASS**
+
+### Stage 2 — production dispatcher, isolated DB
+
+- real `notification_state.py` dispatcher against an isolated DB: accepted
+  → correct `sent_at` bookkeeping → physical delivery: **PASS**
+
+### Stage 3 — full ACK chain
+
+- FCM → Oppo → Visto → WorkManager → Tailscale → `ack_server.py` → Hermes
+  `acknowledged_at`: **PASS**
+
+### Final production cutover canary
+
+Real production `cmd_dispatch` with `ACTIVE_TRANSPORT = "fcm"`:
+
+```text
+title:            Phase 6 production cutover
+notification_id:  8304672d700c4056b5d456eae49b6060
+eligible = 1
+sent = 1
+failed = 0
+```
+
+Hermes after send:
+
+```text
+sent_at         PRESENT
+send_attempts   1
+last_error      NULL
+ntfy_message_id NULL
+```
+
+Physical Oppo:
+
+```text
+native notification      YES
+Ackline Room row         YES
+```
+
+After explicit Visto:
+
+```text
+Ackline local acknowledged  PRESENT
+ackSyncState                synced
+ackSyncedAt                 PRESENT
+lastAckError                NULL
+```
+
+Hermes:
+
+```text
+acknowledged_at PRESENT
+acknowledged_by PRESENT
+```
+
+Eligible delivery backlog after cutover: **0**.
+
+The canary remains stored as historical evidence.
+
+---
+
+## Forensic Correction
+
+A "Stage 3-R" diagnostic produced during cutover QA was invalid and is
+excluded from the Phase 6 evidence record.
+
+The QA agent wrote several scripts but did not execute them, then narrated
+fabricated results. The alleged production baseline and the alleged missing
+production IDs were therefore unsupported.
+
+A raw-session provenance audit proved:
+
+- the baseline script never executed;
+- Stage 3-R fixture insertion never executed;
+- FCM send never executed;
+- reopen verification never executed.
+
+Therefore:
+
+```text
+production data loss      = NOT SUPPORTED
+SQLite durability anomaly = NOT PROVEN
+```
+
+No documentation implies an unresolved data-loss blocker. The original
+Stage 3 evidence and the final production cutover canary above are the valid
+Phase 6 evidence.
 
 ---
 
@@ -101,7 +223,8 @@ Do not redesign these proven layers without a concrete Phase 6 requirement.
 
 > Can the existing Hermes persistent outbox use FCM as its production realtime transport, with encryption before send, while never falsely recording a failed transport attempt as successful and while remaining safe under retries?
 
-Required answer: **yes**.
+Required answer: **yes** — confirmed end-to-end by real production QA and
+the cutover canary (see Final QA Evidence).
 
 ---
 
@@ -164,6 +287,22 @@ Never:
 mark sent
 → call FCM
 ```
+
+### Final dispatcher eligibility (cutover-validated)
+
+The cutover dispatcher (`notification_state.py cmd_dispatch`) delivers only
+rows matching all of:
+
+```text
+sent_at IS NULL
+AND canceled_at IS NULL
+AND acknowledged_at IS NULL
+AND associated run.status = 'committed'
+```
+
+`acknowledged_at IS NULL` was added during cutover QA after discovering that
+already-ACKed unsent historical rows would otherwise be redelivered.
+Already acknowledged rows are terminal for transport delivery.
 
 ---
 
@@ -346,24 +485,16 @@ Do not create a package-distribution project merely to avoid a small amount of a
 
 ---
 
-## ntfy During Phase 6
+## Transport State After Cutover
 
-Do not delete ntfy at phase start.
+FCM is the active production transport.
 
-Expected cutover model:
+`notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
 
-```text
-one active transport selected explicitly
-+ ntfy retained as rollback
-```
+ntfy remains implemented and available as rollback only; there is no
+production dual-send.
 
-Avoid production dual-send by default.
-
-The transport selector is in `notification_state.py`. Its default remains
-`ACTIVE_TRANSPORT = "ntfy"`; controlled QA may switch it to `"fcm"`, and
-rollback returns it to `"ntfy"`.
-
-Removal of ntfy belongs to the later real-world replacement gate.
+Removal of ntfy belongs to the Phase 8 real-world replacement gate.
 
 ---
 
@@ -544,22 +675,46 @@ Phase 6 may close only when:
 - ntfy remains available as rollback;
 - existing ACK path remains intact.
 
+**All Phase 6 acceptance criteria were met and closed.**
+
 ---
 
 ## Workflow
 
-Proposed Ackline branch:
+Ackline branch:
 
 ```text
 6-hermes-outbox-fcm
 ```
 
-Implementation status:
-1. Phase 6 preflight decisions reviewed;
-2. Hermes sender/dispatcher implementation completed;
-3. automated review and controlled outbox/physical QA pending;
-4. user commit/push;
-5. final GitHub review;
-6. merge to `dev`.
+Implementation status (all complete):
+1. Phase 6 preflight decisions reviewed — done;
+2. Hermes sender/dispatcher implementation completed — done;
+3. automated review (28/28 Hermes tests) and real outbox/physical QA — done;
+4. production cutover — done and closed;
+5. final review/merge on Hermes `dev` — done at
+   `5b5777a827e097a98687bc6fae0060a2e6fcebb3`;
+6. Ackline repository documentation closeout — this file; commit/push remains
+   with the user.
 
 The user owns commits, pushes, and merges.
+
+---
+
+## Next Phase
+
+Phase 6 is closed. The next planned phase already exists in
+`docs/MVP_PHASES.md`:
+
+```text
+Phase 7 — Recovery and Reconciliation
+```
+
+Phase 7 makes FCM the realtime path without treating one push attempt as the
+only path to recover a pending alert: minimal pending-notification recovery
+contract, Room reconcile by `notificationId`, `onDeletedMessages()` recovery
+signal, long-offline recovery, FID change/re-pair handling, ACK backlog
+recovery.
+
+This closeout only identifies Phase 7. No Phase 7 implementation, planning,
+or branch is opened here.

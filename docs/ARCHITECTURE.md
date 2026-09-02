@@ -1,4 +1,4 @@
-# Ackline Architecture — Phase 6 Active View
+# Ackline Architecture — Phase 6 Completed Transport View
 
 ## 1. Principle
 
@@ -6,7 +6,9 @@ Ackline remains a small Android notification inbox.
 
 Hermes remains the Personal Admin brain and server-side notification source of truth.
 
-Phase 6 changes **only the production outbound transport from Hermes**.
+Phase 6 changed **only the production outbound transport from Hermes**: the
+outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`), with
+ntfy retained as rollback.
 
 ```text
 Hermes decides
@@ -162,6 +164,18 @@ notification row
 Dispatcher owns DB persistence.
 
 Sender owns one FCM attempt.
+
+Final cutover dispatcher eligibility:
+
+```text
+sent_at IS NULL
+AND canceled_at IS NULL
+AND acknowledged_at IS NULL
+AND associated run.status = 'committed'
+```
+
+`acknowledged_at IS NULL` was added during cutover QA; already acknowledged
+rows are terminal for transport delivery.
 
 Conceptual result categories:
 
@@ -323,11 +337,9 @@ Phase 7 can later improve re-pair/recovery behavior.
 
 ---
 
-## 12. ntfy During Migration
+## 12. Transport State After Cutover
 
-ntfy remains temporary rollback.
-
-Target:
+FCM is the active production transport:
 
 ```text
 persistent outbox
@@ -340,12 +352,12 @@ explicit transport selector
 active   rollback
 ```
 
-A small function/config switch is enough. The implementation default is
-`ACTIVE_TRANSPORT = "ntfy"`; controlled QA may select `"fcm"`.
+`notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
 
-No generic plugin framework.
+ntfy remains implemented and available as rollback only. No production
+dual-send. No generic plugin framework.
 
-No default fanout to both.
+Removal of ntfy belongs to the Phase 8 real-world replacement gate.
 
 ---
 
@@ -412,9 +424,11 @@ The existing SQLite outbox is already the queue.
 
 ---
 
-## 16. Phase 6 Success Shape
+## 16. Phase 6 Completion State
 
-At closure:
+Phase 6 is COMPLETE — CLOSED.
+
+The validated production realtime route is:
 
 ```text
 Hermes queue
@@ -422,8 +436,12 @@ Hermes queue
 → Ackline
 ```
 
-is the validated production realtime route.
+`ACTIVE_TRANSPORT = "fcm"`, cut over in production (merge
+`5b5777a827e097a98687bc6fae0060a2e6fcebb3`), with the canary
+`8304672d700c4056b5d456eae49b6060` retained as historical evidence.
 
-ntfy remains available as rollback until the later real-world replacement gate.
+ntfy remains available as rollback until the Phase 8 real-world replacement
+gate.
 
-Phase 7 then adds recovery/reconciliation without changing the realtime path.
+Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) adds
+recovery/reconciliation without changing the realtime path.

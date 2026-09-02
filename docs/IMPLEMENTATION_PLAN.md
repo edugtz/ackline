@@ -2,32 +2,59 @@
 
 ## 1. Status
 
-**IMPLEMENTED — AUTOMATED REVIEW/QA PENDING**
+**COMPLETE — CLOSED**
 
-Phase: `6 — Hermes Outbox / Sender Integration`
+Phase: `6 — Hermes Outbox / FCM Sender Integration`
 
-Proposed Ackline branch: `6-hermes-outbox-fcm`
+Ackline branch: `6-hermes-outbox-fcm`
 
 Base: `dev`
 
-Phase 5 is merged and frozen as the E2EE baseline.
+The Phase 6 plan was executed in full and the phase is closed.
 
-The preflight is complete. Approved implementation decisions are recorded
-below and are now reflected in the Hermes `phase-6-fcm` branch.
+Phase 6 final result:
 
-### Approved decisions
+```text
+Hermes merge SHA:        5b5777a827e097a98687bc6fae0060a2e6fcebb3
+merge message:           merge: complete Phase 6 FCM transport cutover
+Hermes automated tests:  28/28 PASS
+ACTIVE_TRANSPORT:        fcm
+```
+
+Final implementation commits:
+
+```text
+98a9f53 chore: ignore Hermes runtime state
+6636740 feat: add encrypted FCM notification transport
+b2be0a6 fix: skip acknowledged notifications during dispatch
+2adfbec chore: switch notification transport to FCM
+5b5777a merge: complete Phase 6 FCM transport cutover
+```
+
+### Executed decisions
 
 - Hermes owns `~/.hermes/personal-admin/fcm_sender.py`.
 - `notification_state.py` remains the dispatcher and database owner.
 - Production Python is `~/.hermes/personal-admin/.venv/bin/python` with
   `firebase-admin` installed.
-- FID is read from `~/.hermes/secrets/ackline-fid`; the implementation does
-  not populate that file.
+- FID is read from `~/.hermes/secrets/ackline-fid`.
 - Firebase credentials are loaded explicitly from
   `~/.hermes/secrets/firebase-service-account.json`.
 - Existing on-demand Hermes invocation remains the scheduler.
 - The schema, Android production code, and `ack_server.py` are unchanged.
-- `ntfy` remains the default rollback transport; no dual-send is used.
+- `ACTIVE_TRANSPORT = "fcm"`; ntfy remains implemented as rollback; no
+  dual-send is used.
+
+### Phase advances
+
+The current phase advances to the next planned phase, identified exactly
+from `docs/MVP_PHASES.md`:
+
+```text
+Phase 7 — Recovery and Reconciliation
+```
+
+Phase 7 is not yet planned or opened by this document.
 
 ---
 
@@ -68,10 +95,20 @@ contracts include:
 - `created_at`;
 - `sent_at`;
 - send attempts/error metadata;
-- current ntfy publisher;
+- current ntfy publisher (rollback);
 - queue/dispatch/status commands.
 
-Do not assume exact behavior without inspection.
+Final cutover dispatcher eligibility (validated in production):
+
+```text
+sent_at IS NULL
+AND canceled_at IS NULL
+AND acknowledged_at IS NULL
+AND associated run.status = 'committed'
+```
+
+`acknowledged_at IS NULL` was added during cutover QA: already-ACKed unsent
+historical rows are terminal for transport delivery.
 
 ### Ackline
 
@@ -508,6 +545,21 @@ READY requires:
 
 ## 16. Implementation Status
 
-The Phase 6 implementation is complete for automated review. Controlled
-real-FCM, physical-device, and production cutover QA remain pending. The user
-owns commits, pushes, and merges.
+COMPLETE — CLOSED.
+
+- Hermes implementation: merged to Hermes `dev` at
+  `5b5777a827e097a98687bc6fae0060a2e6fcebb3`.
+- Hermes automated tests: 28/28 PASS.
+- Real QA passed: production sender (Stage 1), production dispatcher against
+  an isolated DB (Stage 2), full ACK chain (Stage 3), and the production
+  cutover canary with `ACTIVE_TRANSPORT = "fcm"` (eligible 1 / sent 1 /
+  failed 0; end-to-end ACK synced; eligible backlog 0).
+- A "Stage 3-R" diagnostic was invalid (narrated fabrication; scripts never
+  executed) and is excluded from the evidence record. Production data loss
+  is NOT SUPPORTED; SQLite durability anomaly NOT PROVEN. See
+  `docs/CURRENT_PHASE.md` "Forensic Correction".
+- Android production code, Room schema, and `ack_server.py` remain unchanged.
+- Current phase advances to Phase 7 — Recovery and Reconciliation, which is
+  not yet planned or opened.
+
+The user owns commits, pushes, and merges.

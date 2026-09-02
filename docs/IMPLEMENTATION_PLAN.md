@@ -121,6 +121,16 @@ No foreground service, AlarmManager, exact alarms, sockets, or MQTT.
 The 2-hour fallback is the bounded backstop for a fully missed transport
 event without user app interaction.
 
+Periodic cadence semantics (approved):
+
+- 2 hours is the requested/nominal periodic cadence, not a bound on
+  execution time.
+- WorkManager execution is inexact and OS-managed; Doze/OEM background
+  restrictions may delay execution.
+- 2 hours is **NOT** a recovery SLA.
+- Acceptance requirement: eventual recovery without manually opening
+  Ackline, not recovery within 2 hours.
+
 ### Work policy
 
 One-time recovery: `ExistingWorkPolicy.KEEP` (a new trigger must not cancel
@@ -193,8 +203,10 @@ Repo: **Hermes Personal Admin**
 #### PLAN
 
 - Inspect `ack_server.py` GET handling and the ACK identity check.
-- Implement the pending recovery query in `notification_state.py` (or an
-  equivalent server-side query function) reusing existing columns only.
+- Implement the recovery query in `ack_server.py` or, only if it
+  materially improves testability, a small pure recovery helper, reusing
+  existing columns only.
+- Do **not** modify `notification_state.py` dispatcher semantics.
 - Add the endpoint reusing `build_envelope`; enforce cap+1.
 - Add server tests: eligibility matrix, ordering, cap/409, auth failure,
   read-only guarantee.

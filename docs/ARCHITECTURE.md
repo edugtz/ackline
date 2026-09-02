@@ -549,9 +549,17 @@ D. periodic WorkManager       → every 2 hours, NetworkType.CONNECTED
   cancel an already queued/retrying recovery or reset its backoff.
 - Periodic recovery is unique periodic work.
 - **2-hour periodic recovery is the safety-net backstop**: after a fully
-  missed transport event it recovers pending alerts without user app
-  interaction. It is a bounded, low-frequency network cost — not
+  missed transport event it is the eventual recovery path without user
+  app interaction. It is a bounded, low-frequency network cost — not
   aggressive polling.
+- Periodic cadence semantics (approved):
+  - 2 hours is the requested/nominal periodic cadence, not a bound on
+    execution time.
+  - WorkManager execution is inexact and OS-managed.
+  - Doze/OEM background restrictions may delay execution.
+  - 2 hours is NOT a recovery SLA.
+  - Acceptance requirement: eventual recovery without manually opening
+    Ackline, not recovery within 2 hours.
 - No foreground service, no AlarmManager, no exact alarms, no sockets, no
   MQTT.
 

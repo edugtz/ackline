@@ -19,7 +19,9 @@ Implementation has **NOT** started.
 - No implementation branches exist (neither in Ackline nor in Hermes).
 - No Kotlin, Java, Gradle, AndroidManifest, Python/Hermes source, test, or
   production database file has been modified by this planning session.
-- No commits, pushes, or merges were made.
+- No Phase 7 **implementation** commits, pushes, or merges have occurred;
+  the Phase 7 planning documentation itself is now versioned (branch
+  `7-recovery-and-reconciliation`, docs only).
 
 Current change:
 
@@ -315,6 +317,16 @@ alone cannot guarantee recovery after a fully missed transport event without
 user app interaction. 2 hours provides a bounded recovery backstop with
 negligible personal-use network cost.
 
+Periodic cadence semantics (approved):
+
+- **2 hours is the requested/nominal periodic cadence**, not a bound on
+  execution time.
+- WorkManager execution is inexact and OS-managed.
+- Doze/OEM background restrictions may delay execution.
+- 2 hours is **NOT** a recovery SLA.
+- Acceptance requirement: **eventual recovery without manually opening
+  Ackline**, not recovery within 2 hours.
+
 ### 8. Unique work policy
 
 One-time recovery:
@@ -593,10 +605,11 @@ Current state:
 
 ```text
 dev
-→ [no phase branches exist yet]
-→ planning documents updated (this session)
-→ document review
-→ Change A branch + implementation
+→ 7-recovery-and-reconciliation (planning/docs only)
+→ planning review (this document set)
+→ merge planning docs to dev
+→ Change A implementation branch
+→ implementation
 → validation
 → independent review
 → manual/device QA (Change D)

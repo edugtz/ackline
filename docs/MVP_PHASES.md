@@ -602,7 +602,10 @@ Final GitHub review: ChatGPT
 - Handle long-offline recovery.
 - Handle FID changes/re-pair requirement.
 - Recover ACK backlog.
-- Avoid aggressive periodic sync unless evidence justifies it.
+- Avoid aggressive periodic sync unless evidence justifies it. (Approved
+  Phase 7 planning decision: a bounded 2-hour WorkManager safety net with
+  `NetworkType.CONNECTED` is the evidence-justified backstop; it is not
+  constant or aggressive polling.)
 
 ### Do Not Do
 

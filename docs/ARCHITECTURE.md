@@ -1,4 +1,4 @@
-# Ackline Architecture — Phase 6 Completed Transport View
+# Ackline Architecture — FCM Transport with Phase 7 Planned Recovery
 
 ## 1. Principle
 
@@ -10,6 +10,10 @@ Phase 6 changed **only the production outbound transport from Hermes**: the
 outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`), with
 ntfy retained as rollback.
 
+Phase 7 (planned, not yet implemented) adds a bounded recovery path so that
+FCM remains the realtime transport without one push attempt being the only
+way to recover a pending alert. See §17 "Phase 7 Planned Architecture".
+
 ```text
 Hermes decides
 Hermes queues
@@ -19,6 +23,7 @@ Ackline receives
 Ackline persists
 User acknowledges
 Hermes records ACK
+            ↕ Phase 7 planned: recovery safety net
 ```
 
 ---
@@ -209,6 +214,18 @@ device displayed alert
 
 Phase 7 reconciliation exists because realtime push can rarely be missed.
 
+Phase 7 planned architecture keeps this distinction explicit:
+
+```text
+recovery eligibility != dispatch eligibility
+```
+
+Dispatch eligibility (Phase 6, unchanged) requires `sent_at IS NULL`.
+Recovery eligibility (Phase 7 planned, §17) does **not** filter `sent_at`:
+`sent_at` only proves FCM/provider acceptance, never that Ackline persisted
+the alert. A row with `sent_at` PRESENT and `acknowledged_at` NULL remains
+recoverable.
+
 ---
 
 ## 7. At-Least-Once Model
@@ -333,7 +350,11 @@ Properties:
 Phase 6 uses `~/.hermes/secrets/ackline-fid` as its one durable local
 configuration source. The implementation does not populate the file.
 
-Phase 7 can later improve re-pair/recovery behavior.
+Phase 7 planned architecture improves re-pair/recovery behavior (§17,
+FID/re-pair): Ackline persists the last observed FID, sets
+`rePairRequired` on change, and the operator re-provisions manually by
+copying the current FID into `~/.hermes/secrets/ackline-fid`. No automatic
+provisioning and no server-side FID registry.
 
 ---
 
@@ -444,4 +465,132 @@ ntfy remains available as rollback until the Phase 8 real-world replacement
 gate.
 
 Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) adds
-recovery/reconciliation without changing the realtime path.
+recovery/reconciliation without changing the realtime path. Phase 7 is in
+PLANNING COMPLETE state; its planned architecture is documented in §17 with
+"planned" labels until implementation lands.
+
+---
+
+## 17. Phase 7 Planned Architecture — Recovery and Reconciliation
+
+> Everything in this section is **planned architecture**, not deployed
+> code. Nothing here exists in production until its change unit lands and
+> passes review/QA.
+
+### 17.1 Realtime path stays FCM
+
+FCM remains the realtime transport. The recovery path is a bounded safety
+net for rare missed/dropped transport events — never constant polling and
+never a replacement for push.
+
+### 17.2 Recovery path (planned)
+
+```text
+Hermes ack_server
+→ GET /notifications/pending
+→ HTTPS/Tailscale
+→ RecoveryWorker
+→ canonical AlertIngestion
+→ Room INSERT IGNORE
+→ notification on INSERTED
+```
+
+- One-way reconcile: Hermes pending → Ackline. Local rows are never
+  deleted merely because they are absent server-side.
+- Duplicate `notificationId` → no overwrite, no ACK-state regression, no
+  notification repost.
+- ACK path remains unchanged: `Visto` → local ACK → WorkManager →
+  HTTPS/Tailscale → ack_server → Hermes `acknowledged_at`.
+- After a successful recovery GET, the existing AckSyncScheduler is
+  enqueued once to drain the local ACK backlog. Recovery never ACKs
+  manually.
+
+### 17.3 Recovery contract (planned)
+
+- `GET /notifications/pending` on the existing Hermes `ack_server.py`;
+- same `Tailscale-User-Login` trusted identity boundary as ACK;
+- read-only, fail-closed, `Cache-Control: no-store`, no server state
+  mutation, no Firebase Auth, no API key, no account/device registry;
+- recovery eligibility:
+
+```text
+canceled_at IS NULL
+AND acknowledged_at IS NULL
+AND associated run.status = 'committed'
+```
+
+- `sent_at` intentionally not filtered (`recovery eligibility !=
+  dispatch eligibility`); deterministic ordering
+  `created_at ASC, notification_id ASC`;
+- max 200 items with cap+1 detection; `> 200` → `HTTP 409
+  too_many_pending` (degraded/operator-action state, not auto-retried
+  forever); no pagination in Phase 7;
+- payloads reuse the Phase 5/6 E2EE envelope (`v`/`kid`/`nonce`/
+  `ciphertext`, built by `fcm_sender.build_envelope`); inner payload
+  unchanged; no plaintext protocol; no new crypto.
+
+### 17.4 Canonical ingestion (planned)
+
+A single `AlertIngestion` path shared by `FirebaseMessagingService` and
+`RecoveryWorker`: kid check → decrypt → inner decode → payload parse →
+`repository.insertIncoming` → native notification only on INSERTED.
+Mechanical reuse of the proven Phase 5/6 receive path.
+
+### 17.5 Triggers and work policy (planned)
+
+```text
+A. onDeletedMessages()        → unique one-time recovery
+B. AcklineApplication startup → unique one-time recovery
+C. FID registration/change    → unique one-time recovery
+D. periodic WorkManager       → every 2 hours, NetworkType.CONNECTED
+```
+
+- One-time work uses `ExistingWorkPolicy.KEEP`: a new trigger must not
+  cancel an already queued/retrying recovery or reset its backoff.
+- Periodic recovery is unique periodic work.
+- **2-hour periodic recovery is the safety-net backstop**: after a fully
+  missed transport event it recovers pending alerts without user app
+  interaction. It is a bounded, low-frequency network cost — not
+  aggressive polling.
+- No foreground service, no AlarmManager, no exact alarms, no sockets, no
+  MQTT.
+
+### 17.6 Failure taxonomy (planned)
+
+- Transient (network, DNS, TLS, timeout, IOException, HTTP 408/429/5xx):
+  `Result.retry()` for one-time and periodic workers, exponential
+  WorkManager backoff; a transient periodic failure is never converted to
+  success merely to wait for the next period.
+- Permanent/configuration (blank/malformed base URL, 403, 404, contract
+  4xx, 409): no retry loop, sanitized diagnostic, Room untouched.
+- Per-item decrypt/validation failure: skip item, continue batch, no
+  crash, no DB regression.
+
+### 17.7 FID / re-pair (planned)
+
+- Ackline persists the last observed FID. First observation → baseline,
+  `rePairRequired = false`. Later different FID → store new FID,
+  `rePairRequired = true`, enqueue recovery.
+- Setup shows an actionable re-pair warning. `rePairRequired` survives
+  process restarts and clears only through an explicit Setup action
+  ("Mark as updated") after the operator updates `~/.hermes/secrets/
+  ackline-fid` with the current FID.
+- No device registry, no server write for FID, no automatic provisioning.
+
+### 17.8 Data rules (planned)
+
+- No Room migration (schema stays v3) unless implementation uncovers a
+  concrete correctness requirement.
+- No `recovered_at`, server revisions, sync version, or tombstones.
+- No Hermes DB migration; recovery derives from existing columns.
+
+### 17.9 Long-offline guarantee gate (planned acceptance gate)
+
+```text
+Hermes creates alert → FCM accepted → device never persists
+→ Hermes sent_at PRESENT, acknowledged_at NULL, Ackline row ABSENT
+→ later connectivity + Tailscale
+→ periodic/event recovery executes WITHOUT manual app open
+→ missing row inserted → one notification shown → Visto
+→ ACK reaches Hermes → later duplicate FCM harmless
+```

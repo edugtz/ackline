@@ -11,11 +11,14 @@ import com.edu.ackline.ack.LocalAcknowledgmentManager
 import com.edu.ackline.data.AlertRepository
 import com.edu.ackline.data.local.AcklineDatabase
 import com.edu.ackline.notifications.AcklineNotificationManager
+import com.edu.ackline.pairing.FidRePairManager
+import com.edu.ackline.pairing.FidRePairStore
 import com.edu.ackline.push.AlertIngestion
 import com.edu.ackline.recovery.HttpsRecoveryRemoteClient
 import com.edu.ackline.recovery.RecoveryRemoteClient
 import com.edu.ackline.recovery.RecoveryRunner
 import com.edu.ackline.recovery.RecoveryScheduler
+import com.edu.ackline.recovery.RecoveryTriggerCoordinator
 import com.edu.ackline.security.PayloadCrypto
 import com.edu.ackline.security.PayloadKeyStore
 import java.util.concurrent.ExecutorService
@@ -92,6 +95,31 @@ class AcklineApplication : Application() {
         RecoveryScheduler(this)
     }
 
+    internal val recoveryTriggers: RecoveryTriggerCoordinator by lazy {
+        RecoveryTriggerCoordinator(
+            enqueueOneTime = recoveryScheduler::enqueue,
+            onSchedulingFailure = {
+                Log.e(TAG, "recovery scheduling failed")
+            },
+        )
+    }
+
+    internal val fidRePairStore: FidRePairStore by lazy {
+        FidRePairStore(this)
+    }
+
+    internal val fidRePairManager: FidRePairManager by lazy {
+        FidRePairManager(
+            store = fidRePairStore,
+            enqueueRecovery = recoveryTriggers::onFidRegistration,
+            publishRestoredState = SetupState::onPairingStateRestored,
+            publishObservedState = SetupState::onPairingStateObserved,
+            publishUpdatedState = SetupState::onRePairUpdated,
+            publishRegistration = SetupState::onRegistered,
+            diagnosticLogger = { message -> Log.e(TAG, message) },
+        )
+    }
+
     val acknowledgmentExecutor: ExecutorService by lazy {
         Executors.newSingleThreadExecutor()
     }
@@ -102,6 +130,12 @@ class AcklineApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        fidRePairManager.restore()
+        try {
+            recoveryScheduler.ensurePeriodic()
+        } catch (_: Exception) {
+            Log.e(TAG, "periodic recovery scheduling failed")
+        }
         try {
             ackSyncScheduler.enqueue()
         } catch (_: Exception) {
@@ -116,9 +150,13 @@ class AcklineApplication : Application() {
             } catch (_: Exception) {
                 Log.e(TAG, "payload key provisioning failed")
                 SetupState.onEncryptionStatusChanged(false)
+            } finally {
+                recoveryTriggers.onStartup()
             }
         }
     }
+
+    internal fun markRePairUpdated(): Boolean = fidRePairManager.markRePairUpdated()
 
     private companion object {
         const val DATABASE_NAME = "ackline.db"

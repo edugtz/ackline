@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.edu.ackline.AcklineApplication
 import com.edu.ackline.RegistrationState
 import com.edu.ackline.SetupState
 
@@ -48,6 +49,7 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
     var notificationGranted by remember {
         mutableStateOf(hasNotificationPermission(context))
     }
+    var rePairUpdateErrorMessage by remember { mutableStateOf<String?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -78,72 +80,100 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
-        Text(
-            text = "Push setup",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        SetupRow(
-            label = "Notification permission",
-            value = if (notificationGranted) "Granted" else "Not granted",
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
-            Button(
-                onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-            ) {
-                Text("Request permission")
-            }
-        }
-
-        SetupRow(
-            label = "FCM registration",
-            value = when (setupState.registrationState) {
-                RegistrationState.Ready -> "Ready"
-                RegistrationState.Waiting -> "Waiting"
-                RegistrationState.Error -> "Error"
-            },
-        )
-
-        SetupRow(
-            label = "Cifrado",
-            value = if (setupState.encryptionReady) "Listo" else "No configurado",
-        )
-
-        val installationId = setupState.installationId
-        Column {
             Text(
-                text = "Device ID",
-                style = MaterialTheme.typography.labelMedium,
+                text = "Push setup",
+                style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(2.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+
+            Spacer(Modifier.height(4.dp))
+
+            SetupRow(
+                label = "Notification permission",
+                value = if (notificationGranted) "Granted" else "Not granted",
+            )
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
+                Button(
+                    onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                ) {
+                    Text("Request permission")
+                }
+            }
+
+            SetupRow(
+                label = "FCM registration",
+                value = when (setupState.registrationState) {
+                    RegistrationState.Ready -> "Ready"
+                    RegistrationState.Waiting -> "Waiting"
+                    RegistrationState.Error -> "Error"
+                },
+            )
+
+            SetupRow(
+                label = "Cifrado",
+                value = if (setupState.encryptionReady) "Listo" else "No configurado",
+            )
+
+            val installationId = setupState.installationId
+            Column {
                 Text(
-                    text = installationId ?: "Waiting",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
+                    text = "Device ID",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (installationId != null) {
-                    OutlinedButton(
-                        onClick = { copyDeviceId(context, installationId) },
+                Spacer(Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = installationId ?: "Waiting",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (installationId != null) {
+                        OutlinedButton(
+                            onClick = { copyDeviceId(context, installationId) },
+                        ) {
+                            Text("Copy")
+                        }
+                    }
+                }
+                if (setupState.rePairRequired) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "El Device ID cambió. Actualiza ackline-fid en Hermes.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    TextButton(
+                        onClick = {
+                            val updated = (context.applicationContext as AcklineApplication)
+                                .markRePairUpdated()
+                            rePairUpdateErrorMessage = if (updated) {
+                                null
+                            } else {
+                                "No se pudo guardar el cambio. Intenta de nuevo."
+                            }
+                        },
                     ) {
-                        Text("Copy")
+                        Text("Marcar como actualizado")
+                    }
+                    rePairUpdateErrorMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             }
-        }
 
-        SetupRow(
-            label = "Last test message",
-            value = setupState.lastMessageSummary ?: "Waiting for a message",
-        )
+            SetupRow(
+                label = "Last test message",
+                value = setupState.lastMessageSummary ?: "Waiting for a message",
+            )
         }
     }
 }

@@ -20,7 +20,11 @@ class AcklineMessagingService : FirebaseMessagingService() {
 
     override fun onRegistered(installationId: String) {
         Log.i(TAG, "FCM registration complete")
-        SetupState.onRegistered(installationId)
+        acklineApplication.fidRePairManager.onRegistered(installationId)
+    }
+
+    override fun onDeletedMessages() {
+        acklineApplication.recoveryTriggers.onDeletedMessages()
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {

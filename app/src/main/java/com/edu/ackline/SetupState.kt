@@ -1,5 +1,6 @@
 package com.edu.ackline
 
+import com.edu.ackline.pairing.FidRePairState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,6 +13,7 @@ data class SetupUiState(
     val installationId: String? = null,
     val lastMessageSummary: String? = null,
     val encryptionReady: Boolean = false,
+    val rePairRequired: Boolean = false,
 )
 
 /**
@@ -20,8 +22,9 @@ data class SetupUiState(
  * The push boundary writes into it; the setup screen observes it. No
  * repository/DI architecture: this is deliberately a tiny object.
  *
- * The FID is operational data: it is held in memory for display/copy only and
- * must never be logged.
+ * Durable FID/re-pair state is owned by the app-private pairing store; this
+ * mirrors it for UI/process state. The FID is operational data and must never
+ * be logged.
  */
 object SetupState {
 
@@ -37,6 +40,18 @@ object SetupState {
         }
     }
 
+    internal fun onPairingStateRestored(pairingState: FidRePairState) {
+        publishPairingState(pairingState)
+    }
+
+    internal fun onPairingStateObserved(pairingState: FidRePairState) {
+        publishPairingState(pairingState)
+    }
+
+    internal fun onRePairUpdated(pairingState: FidRePairState) {
+        publishPairingState(pairingState)
+    }
+
     fun onRegistrationError(error: Exception) {
         _state.update { it.copy(registrationState = RegistrationState.Error) }
     }
@@ -48,4 +63,14 @@ object SetupState {
     fun onEncryptionStatusChanged(isReady: Boolean) {
         _state.update { it.copy(encryptionReady = isReady) }
     }
+
+    private fun publishPairingState(pairingState: FidRePairState) {
+        _state.update { it.withPairingState(pairingState) }
+    }
 }
+
+internal fun SetupUiState.withPairingState(pairingState: FidRePairState): SetupUiState =
+    copy(
+        installationId = pairingState.lastObservedFid ?: installationId,
+        rePairRequired = pairingState.rePairRequired,
+    )

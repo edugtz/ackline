@@ -28,13 +28,9 @@ internal class FidRePairManager(
 
         synchronized(lock) {
             try {
+                val observedState = store.observe(installationId)
+                publishObservedState(observedState)
                 publishRegistration(installationId)
-            } catch (_: Exception) {
-                log("FID pairing state update failed")
-            }
-
-            try {
-                publishObservedState(store.observe(installationId))
             } catch (_: Exception) {
                 log("FID pairing state update failed")
             } finally {

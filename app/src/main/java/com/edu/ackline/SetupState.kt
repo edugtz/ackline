@@ -22,8 +22,9 @@ data class SetupUiState(
  * The push boundary writes into it; the setup screen observes it. No
  * repository/DI architecture: this is deliberately a tiny object.
  *
- * The FID is operational data: it is held in memory for display/copy only and
- * must never be logged.
+ * Durable FID/re-pair state is owned by the app-private pairing store; this
+ * mirrors it for UI/process state. The FID is operational data and must never
+ * be logged.
  */
 object SetupState {
 

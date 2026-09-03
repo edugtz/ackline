@@ -135,6 +135,7 @@ class FidRePairManagerTest {
 
         assertEquals(FidRePairState("A", false), storage.state)
         assertEquals(FidRePairState("A", false), harness.observedStates.last())
+        assertEquals(listOf("A"), harness.registrations)
         assertEquals(2, harness.recoveryEnqueues)
         assertTrue(harness.diagnostics.contains("FID pairing state update failed"))
     }

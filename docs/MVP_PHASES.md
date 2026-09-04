@@ -573,7 +573,7 @@ feat: route Hermes notification outbox through FCM
 
 ---
 
-## Phase 7 — Recovery and Reconciliation
+## Phase 7 — Recovery and Reconciliation (Redesign V2)
 
 ### Objective
 
@@ -582,6 +582,10 @@ Make FCM the realtime path without treating one push attempt as the only path to
 ### Product Quality Goal
 
 A rare missed/dropped transport event must not permanently erase a Hermes pending notification.
+
+### Redesign V2 Context
+
+Phase 7 Change D uncovered a **design failure** — the periodic WorkManager safety net was a dependency that should not exist. This is a planning conclusion, not a product or runtime failure. Hermes bounded FCM redelivery replaces periodic WorkManager as the primary recovery safety net.
 
 ### Recommended AI Route
 
@@ -596,31 +600,36 @@ Final GitHub review: ChatGPT
 
 ### Tasks
 
-- Implement minimal `GET /notifications/pending` or equivalent recovery contract.
-- Reconcile into Room by `notificationId`.
+- Implement Hermes bounded redelivery of sent/unacknowledged notifications (same `notification_id`, NORMAL priority, 6-hour window, 2-hour minimum gap).
+- Implement `GET /notifications/pending` recovery contract.
+- Reconcile into Room by `notificationId` via canonical `AlertIngestion`.
 - Use `onDeletedMessages()` as a recovery signal where appropriate.
-- Handle long-offline recovery.
 - Handle FID changes/re-pair requirement.
-- Recover ACK backlog.
-- Avoid aggressive periodic sync unless evidence justifies it. (Approved
-  Phase 7 planning decision: a bounded 2-hour WorkManager safety net with
-  `NetworkType.CONNECTED` is the evidence-justified backstop; it is not
-  constant or aggressive polling.)
+- Recover ACK backlog after successful recovery GET.
+- Cancel/retire the installed periodic WorkManager unique work.
+- Event-driven triggers only (startup, onDeletedMessages, FID change) — no periodic WorkManager.
 
 ### Do Not Do
 
 - Do not turn reconciliation into constant polling.
+- Do not use periodic WorkManager as a recovery path.
 - Do not duplicate Hermes business logic.
 - Do not build a general sync engine.
 - Do not create server accounts or cloud database.
+- Do not add delivery-receipt protocol.
+- Do not migrate Hermes DB or Room schema.
 
 ### Acceptance Criteria
 
-- Missing pending alert can be recovered once Hermes is reachable.
-- Later duplicate FCM delivery remains harmless.
-- Long-offline return recovers expected pending data.
+- Hermes bounded redelivery sends same `notification_id` for sent/unacknowledged notifications.
+- Ackline Room `INSERT IGNORE` absorbs duplicate delivery harmlessly.
+- One native notification per unique `notificationId`.
+- Event-driven recovery inserts missing alerts without manual app open.
+- Later duplicate FCM/redelivery remains harmless.
 - Reconciliation does not change acknowledged alerts incorrectly.
 - ACK backlog remains consistent.
+- Periodic WorkManager unique work is cancelled.
+- No acceptance gate requires waiting for a periodic WorkManager cycle.
 
 ### Validation Commands
 
@@ -628,12 +637,15 @@ Android critical gate plus targeted ACK/reconciliation tests.
 
 ### Manual QA Checklist
 
-Simulate a missing local alert and verify recovery without duplicates.
+- Verify Hermes bounded redelivery reaches Ackline.
+- Simulate a missing local alert and verify event-driven recovery without duplicates.
+- Verify periodic WorkManager is no longer enqueued.
+- Verify duplicate FCM/redelivery is harmless.
 
 ### Suggested Commit
 
 ```text
-feat: add notification reconciliation
+feat: add Hermes redelivery and event-driven recovery
 ```
 
 ---

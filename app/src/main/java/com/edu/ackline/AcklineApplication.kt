@@ -11,6 +11,8 @@ import com.edu.ackline.ack.LocalAcknowledgmentManager
 import com.edu.ackline.data.AlertRepository
 import com.edu.ackline.data.local.AcklineDatabase
 import com.edu.ackline.notifications.AcklineNotificationManager
+import com.edu.ackline.network.HttpsConnectionFactory
+import com.edu.ackline.network.TailnetHttpsConnectionFactory
 import com.edu.ackline.pairing.FidRePairManager
 import com.edu.ackline.pairing.FidRePairStore
 import com.edu.ackline.push.AlertIngestion
@@ -47,8 +49,12 @@ class AcklineApplication : Application() {
         AckSyncScheduler(this)
     }
 
+    internal val tailnetHttpsConnectionFactory: HttpsConnectionFactory by lazy {
+        TailnetHttpsConnectionFactory(applicationContext)
+    }
+
     val ackRemoteClient: AckRemoteClient by lazy {
-        HttpsAckRemoteClient(BuildConfig.ACK_BASE_URL)
+        HttpsAckRemoteClient(BuildConfig.ACK_BASE_URL, tailnetHttpsConnectionFactory)
     }
 
     val ackSyncRunner: AckSyncRunner by lazy {
@@ -80,7 +86,7 @@ class AcklineApplication : Application() {
     }
 
     internal val recoveryRemoteClient: RecoveryRemoteClient by lazy {
-        HttpsRecoveryRemoteClient(BuildConfig.ACK_BASE_URL)
+        HttpsRecoveryRemoteClient(BuildConfig.ACK_BASE_URL, tailnetHttpsConnectionFactory)
     }
 
     internal val recoveryRunner: RecoveryRunner by lazy {

@@ -132,9 +132,9 @@ class AcklineApplication : Application() {
         super.onCreate()
         fidRePairManager.restore()
         try {
-            recoveryScheduler.ensurePeriodic()
+            recoveryScheduler.cancelLegacyPeriodic()
         } catch (_: Exception) {
-            Log.e(TAG, "periodic recovery scheduling failed")
+            Log.e(TAG, "legacy periodic cancellation failed")
         }
         try {
             ackSyncScheduler.enqueue()

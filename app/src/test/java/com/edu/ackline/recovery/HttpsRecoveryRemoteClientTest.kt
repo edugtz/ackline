@@ -1,5 +1,6 @@
 package com.edu.ackline.recovery
 
+import com.edu.ackline.network.HttpsConnectionFactory
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -136,7 +137,7 @@ class HttpsRecoveryRemoteClientTest {
     @Test
     fun blankAndUnsafeBaseUrlsArePermanentOrNotConfiguredWithoutOpeningConnection() {
         var attempts = 0
-        val factory: (URL) -> HttpsURLConnection? = {
+        val factory = HttpsConnectionFactory {
             attempts += 1
             error("connection must not be opened")
         }

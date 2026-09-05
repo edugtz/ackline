@@ -4,9 +4,11 @@ import java.io.IOException
 import java.net.URI
 import java.net.URL
 import javax.net.ssl.HttpsURLConnection
+import com.edu.ackline.network.HttpsConnectionFactory
 
 class HttpsAckRemoteClient(
     private val ackBaseUrl: String,
+    private val connectionFactory: HttpsConnectionFactory,
 ) : AckRemoteClient {
 
     override fun acknowledge(
@@ -25,12 +27,12 @@ class HttpsAckRemoteClient(
             ?: return AckRemoteResult.PermanentFailure(AckErrorCategory.CLIENT_ERROR)
 
         val connection = try {
-            url.openConnection() as? HttpsURLConnection
+            connectionFactory.open(url)
         } catch (_: IOException) {
             return AckRemoteResult.TransientFailure
         } catch (_: IllegalArgumentException) {
             return AckRemoteResult.PermanentFailure(AckErrorCategory.CLIENT_ERROR)
-        } ?: return AckRemoteResult.PermanentFailure(AckErrorCategory.CLIENT_ERROR)
+        }
 
         return try {
             connection.instanceFollowRedirects = false

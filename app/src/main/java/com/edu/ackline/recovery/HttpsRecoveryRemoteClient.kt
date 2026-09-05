@@ -9,10 +9,11 @@ import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import javax.net.ssl.HttpsURLConnection
+import com.edu.ackline.network.HttpsConnectionFactory
 
 class HttpsRecoveryRemoteClient(
     private val ackBaseUrl: String,
-    private val connectionFactory: (URL) -> HttpsURLConnection? = ::openHttpsConnection,
+    private val connectionFactory: HttpsConnectionFactory,
 ) : RecoveryRemoteClient {
 
     override fun fetchPending(): RecoveryRemoteResult {
@@ -26,7 +27,7 @@ class HttpsRecoveryRemoteClient(
             )
 
         val connection = try {
-            connectionFactory(url)
+            connectionFactory.open(url)
         } catch (_: IOException) {
             return RecoveryRemoteResult.TransientFailure
         } catch (_: IllegalArgumentException) {
@@ -151,9 +152,6 @@ class HttpsRecoveryRemoteClient(
         const val HTTP_CONFLICT = 409
     }
 }
-
-private fun openHttpsConnection(url: URL): HttpsURLConnection? =
-    url.openConnection() as? HttpsURLConnection
 
 internal fun buildRecoveryUrl(baseUrl: String): URL? {
     val normalizedBaseUrl = baseUrl.trim().trimEnd('/')

@@ -108,7 +108,7 @@ chore: add Android and FCM foundation
 
 ### Objective
 
-Prove that FCM solves the specific ntfy failure mode: normal connectivity transitions must not require manually opening the app to restore push.
+Prove that FCM provides reliable push delivery: normal connectivity transitions must not require manually opening the app to restore push.
 
 ### Product Quality Goal
 
@@ -510,7 +510,7 @@ feat: encrypt Hermes notification payloads
 
 ### Objective
 
-Replace the ntfy transport in the existing Hermes notification outbox without weakening its delivery semantics.
+Route the existing Hermes notification outbox through FCM without weakening its delivery semantics.
 
 ### Product Quality Goal
 
@@ -555,7 +555,7 @@ Final GitHub review: ChatGPT
 - No false sent state.
 - Duplicate retry remains safe on Android.
 - Invalid FID becomes actionable instead of infinite retry.
-- ntfy path can remain available until replacement gate passes.
+- ntfy is legacy/disabled — Phase 8 tests Ackline/FCM alone.
 
 ### Validation Commands
 
@@ -663,7 +663,7 @@ feat: add Hermes redelivery and event-driven recovery
 
 ### Objective
 
-Decide with evidence whether ntfy can be retired.
+Validate Ackline/FCM as the sole notification transport under multi-day real-world conditions on the Oppo. ntfy is NOT an approved fallback — Phase 8 tests Ackline/FCM alone.
 
 ### Product Quality Goal
 
@@ -714,22 +714,23 @@ Development/test logs are sufficient. Do not add a production analytics SDK.
 
 ### Do Not Do
 
-- Do not retire ntfy after a single successful test.
+- Do not silently switch to ntfy as fallback during testing.
 - Do not hide failures with foreground-service hacks.
 - Do not call a manual-open requirement acceptable.
 - Do not add analytics just for test metrics.
 
 ### Acceptance Criteria
 
-ntfy may be retired only if:
+Phase 8 passes when Ackline/FCM alone demonstrates:
 
 - no normal-use scenario requires manually opening the app to restore push;
 - no ACKs are lost;
 - duplicate delivery is harmless;
 - offline recovery works;
 - reconciliation works;
-- ColorOS behavior is understood/documented;
-- reliability is clearly better than ntfy.
+- ColorOS behavior is understood/documented.
+
+If Phase 8 exposes reliability problems, the path is to improve Ackline/FCM or evaluate another alternative — ntfy is not an approved fallback.
 
 ### Validation Commands
 

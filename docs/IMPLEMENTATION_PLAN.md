@@ -780,7 +780,7 @@ before starting the matrix.
 
 ## 9. Out of Scope / Do Not Do
 
-- ntfy retirement (Phase 8);
+- ntfy is legacy/disabled — not a fallback; Phase 8 validates Ackline/FCM alone;
 - constant/aggressive polling;
 - periodic WorkManager as a recovery path;
 - generic bidirectional sync engine;
@@ -843,12 +843,12 @@ Current change: **none — Phase 7 implementation is complete.**
   `96ed0e71ea` and Hermes Personal Admin checkout `fab085d7400…` are
   DIFFERENT repositories; do not claim `fab085d` exists in hermes-agent
   history.
-- **Operational follow-up (not closed by Phase 7):** `ack_server.py`
-  lifecycle/supervision is a separate operational concern — the listener
-  disappeared once during QA and had to be restarted. The endpoint itself
-  is functionally validated, but exact unattended lifecycle/supervision is
-  not yet proven. No launchd/systemd/supervisor implementation is invented
-  here; the follow-up is recorded only.
+- **Operational follow-up — RESOLVED:** `ack_server.py` lifecycle/supervision
+  is resolved via macOS system launchd LaunchDaemon
+  (`ai.hermes.personal-admin-ack`). Runs as user `eduardo` (not root),
+  binds `127.0.0.1:2587`, external exposure through Tailscale Serve `:8443`.
+  Controlled SIGTERM confirmed auto-restart in ~2s. RunAtLoad is configured
+  but post-reboot auto-start has not been physically verified yet.
 - **Honest claims:** do not claim exact-once FCM, an exact +2h redelivery
   SLA, indefinite autonomous recovery when every FCM attempt is lost and
   the app never starts, periodic WorkManager recovery, delivery-receipt

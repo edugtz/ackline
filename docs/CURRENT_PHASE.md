@@ -31,9 +31,8 @@ Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout 
 Current change: **none — Phase 7 runtime work is complete.**
 
 Next actual step: **Phase 8 — multi-day real-world Oppo replacement gate**
-(see Phase 8 section below), with the tracked `ack_server.py`
-lifecycle/supervision operational follow-up (see Operational Follow-Up
-below).
+(see Phase 8 section below). The `ack_server.py` lifecycle/supervision
+operational follow-up is resolved (see Operational Follow-Up below).
 
 ---
 
@@ -42,7 +41,7 @@ below).
 Phase 6 — Hermes Outbox / FCM Sender Integration was fully implemented,
 validated against real Firebase and the physical Oppo, and cut over to
 production. `ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`; ntfy
-remains implemented as rollback only.
+is legacy/disabled state pending later cleanup/removal.
 
 Hermes final merge:
 
@@ -109,7 +108,7 @@ No periodic Android recovery.
 No delivery receipt protocol.
 No Hermes DB migration.
 No Room migration.
-ntfy remains rollback through Phase 8.
+ntfy is NOT an approved fallback path — Phase 8 tests Ackline/FCM alone.
 ```
 
 ### Long-offline model (implemented)
@@ -465,17 +464,37 @@ FCM offline retention + bounded copies + event-driven reconciliation.
 
 ---
 
-## Operational Follow-Up (separate — NOT closed by Phase 7)
+## Operational Follow-Up — RESOLVED
 
-`ack_server.py` lifecycle/supervision remains a **separate operational
-concern** — explicitly not silently closed here.
+`ack_server.py` lifecycle/supervision is **resolved**.
 
-- During QA the listener disappeared **once** and had to be restarted.
-- The server endpoint itself is **functionally validated**.
-- Exact unattended lifecycle/supervision is **not yet proven**.
+Supervisor: macOS system launchd LaunchDaemon
+Label: `ai.hermes.personal-admin-ack`
+Config: `/Library/LaunchDaemons/ai.hermes.personal-admin-ack.plist`
 
-This documentation change does **not** invent a launchd/systemd/supervisor
-implementation; the follow-up is recorded here only.
+Process properties:
+- runs as user `eduardo` via `UserName` (NOT root)
+- interpreter: `/Users/eduardo/.hermes/personal-admin/.venv/bin/python`
+- script: `/Users/eduardo/.hermes/personal-admin/ack_server.py`
+- working directory: `/Users/eduardo/.hermes/personal-admin`
+- bind remains: `127.0.0.1:2587`
+- external exposure remains ONLY through existing Tailscale Serve `:8443`
+
+Physical evidence:
+- exactly one listener
+- process owner `eduardo`
+- PPID = system launchd
+- local `/health` = 200
+- Tailscale `/health` = 200
+- controlled SIGTERM: old PID exited, new PID automatically spawned in ~2s,
+  no kickstart, no manual restart
+- obsolete user LaunchAgent removed
+
+Status: **AUTO-RESTART / PROCESS SUPERVISION = PASS**
+
+Honesty limitation: `RunAtLoad` is configured on the LaunchDaemon, but
+actual post-reboot auto-start has not been physically verified yet; it will
+be confirmed naturally on a future Mac reboot.
 
 ---
 
@@ -483,15 +502,20 @@ implementation; the follow-up is recorded here only.
 
 Phase 8 remains the **multi-day real-world Oppo replacement gate**:
 
-- keep ntfy rollback until Phase 8 completes;
+- Ackline + FCM is the sole notification transport under test;
+- Phase 8 tests Ackline/FCM alone — no ntfy fallback or rollback;
 - Doze / overnight / ColorOS real-world behavior belongs there;
-- ntfy may be retired only on Phase 8 evidence.
+- if Phase 8 exposes reliability problems, the path is to improve
+  Ackline/FCM or evaluate another alternative — ntfy is not an approved
+  fallback;
+- any remaining ntfy implementation/configuration is legacy disabled state
+  pending later cleanup/removal.
 
 ---
 
 ## Phase 7 Constraints Still in Force (retained)
 
-- ntfy retirement deferred to Phase 8;
+- ntfy is legacy/disabled — not a fallback; Phase 8 validates Ackline/FCM alone;
 - no constant/aggressive polling;
 - no periodic WorkManager as a recovery path;
 - no generic bidirectional sync engine;
@@ -530,7 +554,7 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Begin **Phase 8 — multi-day real-world Oppo replacement gate**; ntfy
-   remains rollback throughout.
-2. Track the `ack_server.py` lifecycle/supervision operational follow-up
-   (separate from Phase 7 closeout).
+1. Begin **Phase 8 — multi-day real-world Oppo replacement gate**;
+   Ackline/FCM is the sole transport under test — no ntfy fallback.
+2. `ack_server.py` lifecycle/supervision is resolved (see Operational
+   Follow-Up above).

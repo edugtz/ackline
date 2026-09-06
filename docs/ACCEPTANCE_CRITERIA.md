@@ -40,7 +40,7 @@ Required pass cases:
 - airplane mode → message queued → connectivity restored;
 - Doze/high-priority visible alert test;
 - multi-hour idle;
-- multi-day real-use test before retiring ntfy.
+- multi-day real-use test of Ackline/FCM as sole transport.
 
 Critical fail condition:
 
@@ -187,7 +187,10 @@ Every completed phase must have:
 
 ## 10. Replacement Gate
 
-ntfy is retired only after:
+ntfy is legacy/disabled state — NOT an approved fallback or rollback path.
+Phase 8 tests Ackline/FCM alone and must not silently switch to ntfy.
+
+Phase 8 validates Ackline/FCM as sole transport when:
 
 ```text
 transport reliability PASS

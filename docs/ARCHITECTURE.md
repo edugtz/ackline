@@ -7,8 +7,8 @@ Ackline remains a small Android notification inbox.
 Hermes remains the Personal Admin brain and server-side notification source of truth.
 
 Phase 6 changed **only the production outbound transport from Hermes**: the
-outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`), with
-ntfy retained as rollback.
+outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`);
+ntfy is legacy/disabled state pending later cleanup/removal.
 
 Phase 7 (implemented, merged, and PASSED final integration QA) added Hermes
 bounded FCM redelivery as the primary recent-loss safety net, plus
@@ -422,15 +422,14 @@ explicit transport selector
    ┌───┴───┐
    │       │
   FCM     ntfy
-active   rollback
+active   disabled
 ```
 
 `notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
 
-ntfy remains implemented and available as rollback only. No production
-dual-send. No generic plugin framework.
-
-Removal of ntfy belongs to the Phase 8 real-world replacement gate.
+ntfy is legacy/disabled — NOT an approved fallback or rollback path. Phase 8
+must test Ackline/FCM alone and must not silently switch to ntfy. Any
+remaining ntfy code/configuration is pending later cleanup/removal.
 
 ---
 
@@ -527,8 +526,8 @@ Hermes queue
 `5b5777a827e097a98687bc6fae0060a2e6fcebb3`), with the canary
 `8304672d700c4056b5d456eae49b6060` retained as historical evidence.
 
-ntfy remains available as rollback until the Phase 8 real-world replacement
-gate.
+ntfy is legacy/disabled state — Phase 8 validates Ackline/FCM alone with no
+ntfy fallback.
 
 Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) is
 **implemented and merged**; its final architecture is documented in §17.
@@ -776,10 +775,10 @@ The long-offline model is:
 FCM offline retention + bounded copies + event-driven reconciliation.
 ```
 
-### 17.11 Operational follow-up (not part of Phase 7 closeout)
+### 17.11 Operational follow-up — RESOLVED
 
-`ack_server.py` lifecycle/supervision remains a separate operational
-concern: the listener disappeared once during QA and had to be restarted.
-The endpoint is functionally validated, but exact unattended
-lifecycle/supervision is not yet proven. No launchd/systemd/supervisor
-implementation exists yet; tracked as an operational follow-up only.
+`ack_server.py` lifecycle/supervision is resolved via macOS system launchd
+LaunchDaemon (`ai.hermes.personal-admin-ack`). Runs as user `eduardo` (not
+root), binds `127.0.0.1:2587`, external exposure through Tailscale Serve
+`:8443`. Controlled SIGTERM confirmed auto-restart in ~2s. RunAtLoad is
+configured but post-reboot auto-start has not been physically verified yet.

@@ -13,7 +13,7 @@ The app has two core responsibilities:
 
 ## 2. Primary Product Goal
 
-Replace the current ntfy + persistent WebSocket delivery path with a push architecture that does not require the user to manually reopen the app after Wi-Fi/mobile transitions or temporary connectivity loss.
+Deliver Hermes alerts through FCM push (replacing the former ntfy + persistent WebSocket path) without requiring the user to manually reopen the app after Wi-Fi/mobile transitions or temporary connectivity loss. ntfy is legacy/disabled — not an approved fallback.
 
 Target path:
 

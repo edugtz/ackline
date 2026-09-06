@@ -661,6 +661,12 @@ feat: add Hermes redelivery and event-driven recovery
 
 ## Phase 8 — Real-World Replacement Gate
 
+> **STATUS: DEFERRED.** Phase 8 is deferred until the MVP product
+> experience is ready for genuine daily use. The already-completed Phase 7
+> baseline (Change G final integration QA) is readiness evidence but does
+> not count as executing or passing Phase 8. Phase 9 is the current /
+> next active phase.
+
 ### Objective
 
 Validate Ackline/FCM as the sole notification transport under multi-day real-world conditions on the Oppo. ntfy is NOT an approved fallback — Phase 8 tests Ackline/FCM alone.
@@ -751,6 +757,10 @@ test: complete Hermes notification replacement gate
 ---
 
 ## Phase 9 — MVP UX / Product Polish
+
+> **STATUS: CURRENT / NEXT ACTIVE PHASE.** Phase 8 is deferred until the
+> MVP product experience is ready for genuine daily use. Phase 9 is the
+> next implementation phase.
 
 ### Objective
 

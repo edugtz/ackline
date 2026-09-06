@@ -3,10 +3,12 @@
 ## Status
 
 **PHASE 7 COMPLETE — FINAL QA PASS**
+**PHASE 8 DEFERRED — MULTI-DAY REAL-WORLD GATE PENDING**
+**PHASE 9 — CURRENT / NEXT ACTIVE PHASE**
 
-Phase: `7 — Recovery and Reconciliation`
+Phase: `9 — MVP UX / Product Polish`
 
-Ackline branch: `dev` — HEAD `b4488f9adb91985b50e052df9261fa9f4f9a20fc`
+Ackline branch: `dev` — HEAD `414d3471561f89dc78050e2638b07aaf17238fc5`
 
 Hermes Personal Admin branch: `dev` — HEAD `fab085d7400499353c638f93d62aa4661330aa18`
 
@@ -14,8 +16,8 @@ Phase 7 blockers: **0**
 
 Implementation changes A/B/C/E/F/G1 are already merged. Final integration
 QA (Change G) is **PASS** — the documentation closeout is recorded by this
-documentation change. Change G is integration QA/docs closeout, not a
-separate runtime source merge.
+Phase 7 documentation closeout change. Change G is integration QA/docs
+closeout, not a separate runtime source merge.
 
 ```text
 Change A  Hermes Recovery Contract              IMPLEMENTED / MERGED
@@ -30,8 +32,11 @@ Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout 
 
 Current change: **none — Phase 7 runtime work is complete.**
 
-Next actual step: **Phase 8 — multi-day real-world Oppo replacement gate**
-(see Phase 8 section below). The `ack_server.py` lifecycle/supervision
+Next actual step: **Phase 9 — MVP UX / Product Polish**.
+
+Phase 8 — multi-day real-world Oppo replacement gate — is **DEFERRED**
+until the MVP product experience is ready for genuine daily use (see
+Phase 8 section below). The `ack_server.py` lifecycle/supervision
 operational follow-up is resolved (see Operational Follow-Up below).
 
 ---
@@ -498,18 +503,34 @@ be confirmed naturally on a future Mac reboot.
 
 ---
 
-## Phase 8 — Next Actual Step
+## Phase 8 — DEFERRED
 
-Phase 8 remains the **multi-day real-world Oppo replacement gate**:
+Phase 8 is the **multi-day real-world Oppo replacement gate**. It is
+**DEFERRED** until the MVP product experience is ready for genuine daily
+use.
+
+The already-completed Phase 7 baseline (Change G final integration QA)
+remains recorded as readiness evidence, but it does not count as
+executing or passing Phase 8.
+
+It is not required to keep the development Mac running for several days
+solely for a pre-product test window.
+
+When eventually executed, Phase 8 still validates:
 
 - Ackline + FCM is the sole notification transport under test;
 - Phase 8 tests Ackline/FCM alone — no ntfy fallback or rollback;
-- Doze / overnight / ColorOS real-world behavior belongs there;
+- normal multi-day Oppo use;
+- screen off / overnight;
+- Wi-Fi/mobile transitions;
+- ColorOS / Doze behavior;
+- ACK / recovery behavior;
+- natural Hermes alerts;
 - if Phase 8 exposes reliability problems, the path is to improve
   Ackline/FCM or evaluate another alternative — ntfy is not an approved
-  fallback;
-- any remaining ntfy implementation/configuration is legacy disabled state
-  pending later cleanup/removal.
+  fallback.
+
+ntfy remains legacy/disabled and is not a fallback.
 
 ---
 
@@ -554,7 +575,10 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Begin **Phase 8 — multi-day real-world Oppo replacement gate**;
-   Ackline/FCM is the sole transport under test — no ntfy fallback.
-2. `ack_server.py` lifecycle/supervision is resolved (see Operational
+1. Begin **Phase 9 — MVP UX / Product Polish** (see Phase 9 section in
+   `docs/MVP_PHASES.md`).
+2. Phase 8 — multi-day real-world Oppo replacement gate — will be
+   executed after the MVP product experience is ready for genuine daily
+   use; Ackline/FCM is the sole transport under test — no ntfy fallback.
+3. `ack_server.py` lifecycle/supervision is resolved (see Operational
    Follow-Up above).

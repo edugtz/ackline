@@ -573,7 +573,16 @@ feat: route Hermes notification outbox through FCM
 
 ---
 
-## Phase 7 — Recovery and Reconciliation (Redesign V2)
+## Phase 7 — Recovery and Reconciliation (Redesign V2) — IMPLEMENTED
+
+> **STATUS: COMPLETE — FINAL QA PASS.** Implementation changes A/B/C/E/F/G1
+> landed and merged (Ackline `dev` `b4488f9…`; Hermes Personal Admin `dev`
+> `fab085d…`). Change G is integration QA/docs closeout, not a separate
+> runtime source merge. Change D remains **ABORTED — DESIGN GATE
+> FAILED** (historical). Final integration QA (Change G) **PASS** —
+> documentation closeout recorded by the Phase 7 documentation closeout
+> change. Evidence: `docs/CURRENT_PHASE.md`,
+> `docs/IMPLEMENTATION_PLAN.md`, `docs/ARCHITECTURE.md` §17.
 
 ### Objective
 
@@ -583,9 +592,9 @@ Make FCM the realtime path without treating one push attempt as the only path to
 
 A rare missed/dropped transport event must not permanently erase a Hermes pending notification.
 
-### Redesign V2 Context
+### Redesign V2 Context (HISTORICAL — retained)
 
-Phase 7 Change D uncovered a **design failure** — the periodic WorkManager safety net was a dependency that should not exist. This is a planning conclusion, not a product or runtime failure. Hermes bounded FCM redelivery replaces periodic WorkManager as the primary recovery safety net.
+Phase 7 Change D uncovered a **design failure** — the periodic WorkManager safety net was a dependency that should not exist. This was a planning conclusion, not a product or runtime failure, and not a proven RecoveryWorker bug. Hermes bounded FCM redelivery replaced periodic WorkManager as the primary recovery safety net; periodic WorkManager recovery is retired (Change F).
 
 ### Recommended AI Route
 
@@ -635,12 +644,12 @@ Final GitHub review: ChatGPT
 
 Android critical gate plus targeted ACK/reconciliation tests.
 
-### Manual QA Checklist
+### Manual QA Checklist (executed — PASS)
 
-- Verify Hermes bounded redelivery reaches Ackline.
-- Simulate a missing local alert and verify event-driven recovery without duplicates.
-- Verify periodic WorkManager is no longer enqueued.
-- Verify duplicate FCM/redelivery is harmless.
+- Verify Hermes bounded redelivery reaches Ackline. — DONE (PASS)
+- Simulate a missing local alert and verify event-driven recovery without duplicates. — DONE (PASS; component-level: transport + ingestion proven via fresh-install 4/4; native notification presentation on the recovery path was not separately forced — `POST_NOTIFICATIONS` was not granted during that run)
+- Verify periodic WorkManager is no longer enqueued. — DONE (PASS)
+- Verify duplicate FCM/redelivery is harmless. — DONE (PASS)
 
 ### Suggested Commit
 

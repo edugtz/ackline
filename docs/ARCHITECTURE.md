@@ -1,4 +1,4 @@
-# Ackline Architecture — FCM Transport with Phase 7 Planned Recovery
+# Ackline Architecture — FCM Transport with Phase 7 Recovery (Implemented)
 
 ## 1. Principle
 
@@ -10,23 +10,24 @@ Phase 6 changed **only the production outbound transport from Hermes**: the
 outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`), with
 ntfy retained as rollback.
 
-Phase 7 (Redesign V2, planned, not yet implemented) adds Hermes bounded
-FCM redelivery as the primary recovery safety net, plus event-driven
-Android reconciliation, so that FCM remains the realtime transport without
-one push attempt being the only way to recover a pending alert. Periodic
-WorkManager is no longer a recovery dependency. See §17
-"Phase 7 Planned Architecture (Redesign V2)".
+Phase 7 (implemented, merged, and PASSED final integration QA) added Hermes
+bounded FCM redelivery as the primary recent-loss safety net, plus
+event-driven Android reconciliation, so that FCM remains the realtime
+transport without one push attempt being the only way to recover a pending
+alert. Periodic WorkManager is no longer a recovery dependency. See §17
+"Phase 7 Implemented Recovery Architecture".
 
 ```text
 Hermes decides
 Hermes queues
 Hermes encrypts
-FCM transports
+FCM transports            ← realtime, with bounded redelivery for unacknowledged
 Ackline receives
 Ackline persists
 User acknowledges
-Hermes records ACK
-            ↕ Phase 7 planned: Hermes redelivery + event-driven recovery
+Hermes records ACK        ← explicit tailnet VPN Network HTTPS
+            ↕ event-driven GET /notifications/pending recovery
+              (startup / onDeletedMessages / FID registration-change)
 ```
 
 ---
@@ -43,7 +44,7 @@ Hermes records ACK
 - `notification_id`;
 - `ack_token`;
 - `level/title/message/created_at`;
-- production FCM sending;
+- production FCM sending and bounded redelivery;
 - server acknowledgment state.
 
 ### FCM owns only
@@ -65,7 +66,8 @@ FCM is not:
 - Room persistence;
 - native notification presentation;
 - explicit local `Visto`;
-- durable remote ACK scheduling.
+- durable remote ACK scheduling;
+- event-driven recovery (startup, `onDeletedMessages`, FID change).
 
 Ackline does not own Personal Admin decision logic.
 
@@ -126,21 +128,52 @@ FCM
 → AES-GCM auth/decrypt
 → strict UTF-8/string JSON
 → existing parseAcklinePayload
+→ canonical AlertIngestion
 → Room INSERT IGNORE
-→ native notification
+→ native notification only on INSERTED
 ```
+
+### Bounded FCM redelivery (Phase 7, primary recent-loss safety net)
+
+```text
+Hermes redelivery query
+→ sent_at IS NOT NULL
+→ acknowledged_at IS NULL
+→ canceled_at IS NULL
+→ committed run
+→ within 6 hours of first sent_at
+→ at least 2 hours since last_attempt_at
+→ same notification_id
+→ NORMAL FCM priority
+→ FCM send
+→ Ackline Room INSERT IGNORE (duplicate harmless)
+```
+
+Properties (validated in production):
+
+- `sent_at` is preserved as **first FCM acceptance** — never overwritten;
+- `send_attempts` and `last_attempt_at` are reused for tracking;
+- redelivery copies use **NORMAL** priority regardless of original level;
+- bounded by the 6-hour window — no infinite redelivery loop;
+- no Hermes DB migration; no delivery-receipt protocol.
+
+Scheduling nuance: the existing Hermes scheduler cadence is q120m, but
+eligibility requires `last_attempt_at >= 2h`; a scheduler cycle may land
+slightly before the strict 2h boundary and skip until the next cycle. There
+is **no exact +2h redelivery SLA** and no guarantee of exactly three copies.
 
 ---
 
-## 4. ACK Flow Is Independent
-
-Phase 6 does not change ACK topology:
+## 4. ACK Flow Is Independent — Explicit Tailnet VPN Binding
 
 ```text
 User presses Visto
 → Room local ACK immediately
-→ WorkManager
-→ HTTPS/Tailscale
+→ durable WorkManager (AckSyncRunner)
+→ HttpsAckRemoteClient
+→ ConnectivityManager active VPN Network
+→ vpnNetwork.openConnection(url)
+→ Tailscale Serve
 → Hermes ack_server.py
 → Hermes acknowledged_at
 → Ackline SYNCED
@@ -150,10 +183,24 @@ Important:
 
 ```text
 FCM delivery does NOT use Tailscale
-ACK does
+ACK does — over the explicit VPN Network
 ```
 
-Tailscale outage must not block push reception.
+All tailnet HTTPS (ACK and recovery GET) is bound explicitly to the active
+VPN `Network` via `TailnetHttpsConnectionFactory`:
+
+- no process-wide binding;
+- no hardcoded Tailscale IP;
+- no TLS weakening;
+- no fallback to public/default network for tailnet endpoints.
+
+This was required because the default/implicit app network path could not
+reach the Mac tailnet while the device shell path could
+(`APP_UID_TAILNET_ROUTING_FAILURE_PROVEN`). Both paths were physically
+validated: `EXPLICIT_VPN_ACK_PROVEN = YES` and
+`EXPLICIT_VPN_RECOVERY_PROVEN = YES`.
+
+A Tailscale outage must not block push reception; it only delays ACK/recovery.
 
 ---
 
@@ -173,7 +220,7 @@ Dispatcher owns DB persistence.
 
 Sender owns one FCM attempt.
 
-Final cutover dispatcher eligibility:
+Dispatch eligibility (unchanged):
 
 ```text
 sent_at IS NULL
@@ -193,23 +240,17 @@ TransientFailure(category)
 PermanentFailure(category)
 ```
 
-Exact Python shape is a preflight decision. Do not create an unnecessary transport framework.
-
 ---
 
 ## 6. Acceptance vs Delivery
 
 FCM provider acceptance and end-device delivery are different.
 
-Phase 6 may record:
-
 ```text
 sent_at = provider accepted
 ```
 
-only if that matches the existing Hermes contract after preflight verification.
-
-It must never claim:
+It is never a claim of:
 
 ```text
 device displayed alert
@@ -217,22 +258,21 @@ device displayed alert
 
 Phase 7 reconciliation exists because realtime push can rarely be missed.
 
-Phase 7 Redesign V2 keeps this distinction explicit:
+Phase 7 keeps this distinction explicit:
 
 ```text
 recovery eligibility != dispatch eligibility
 redelivery eligibility != dispatch eligibility
 ```
 
-Dispatch eligibility (Phase 6, unchanged) requires `sent_at IS NULL`.
-Recovery eligibility (Phase 7 planned, §17) does **not** filter `sent_at`:
-`sent_at` only proves FCM/provider acceptance, never that Ackline persisted
-the alert. A row with `sent_at` PRESENT and `acknowledged_at` NULL remains
-recoverable.
-
-Hermes redelivery eligibility (Phase 7 Redesign V2, §17) requires
-`sent_at IS NOT NULL` because it specifically targets notifications that
-were accepted by FCM but never acknowledged by the device.
+- Dispatch eligibility (Phase 6, unchanged) requires `sent_at IS NULL`.
+- Recovery eligibility (Phase 7) does **not** filter `sent_at`:
+  `sent_at` only proves FCM/provider acceptance, never that Ackline
+  persisted the alert. A row with `sent_at` PRESENT and `acknowledged_at`
+  NULL remains recoverable.
+- Redelivery eligibility (Phase 7) requires `sent_at IS NOT NULL` because
+  it specifically targets notifications that were accepted by FCM but
+  never acknowledged by the device.
 
 ---
 
@@ -253,9 +293,10 @@ attempt B
 → FCM accepts again
 ```
 
-Ackline's `notification_id` dedupe produces one logical row and no duplicate notification repost.
+Ackline's `notification_id` dedupe produces one logical row and no duplicate
+notification repost.
 
-Do not pursue exactly-once transport.
+Do not pursue exactly-once transport. Do not claim exact-once FCM.
 
 ---
 
@@ -298,7 +339,8 @@ AAD = ackline-e2ee|v=1|kid=ackline-main
 max inner = 2500 UTF-8 bytes
 ```
 
-No Phase 6 protocol change is expected.
+No Phase 7 protocol change. Recovery payloads reuse the same envelope via
+`fcm_sender.build_envelope(row)`.
 
 ---
 
@@ -318,8 +360,6 @@ ackline.payload.ackline-main
 Mac raw key stays outside repo.
 
 Android raw staging is already deleted after import.
-
-Phase 6 only reads the Mac key for encryption.
 
 No key rotation in this phase.
 
@@ -355,14 +395,18 @@ Properties:
 - not hardcoded;
 - not routinely logged in full.
 
-Phase 6 uses `~/.hermes/secrets/ackline-fid` as its one durable local
-configuration source. The implementation does not populate the file.
+Hermes uses `~/.hermes/secrets/ackline-fid` as its one durable local
+configuration source. Hermes never writes the file; the operator
+provisions it manually.
 
-Phase 7 planned architecture improves re-pair/recovery behavior (§17,
-FID/re-pair): Ackline persists the last observed FID, sets
-`rePairRequired` on change, and the operator re-provisions manually by
-copying the current FID into `~/.hermes/secrets/ackline-fid`. No automatic
-provisioning and no server-side FID registry.
+Phase 7 (implemented): Ackline persists the last observed FID, detects
+FID registration/change, sets `rePairRequired`, enqueues event-driven
+recovery, and surfaces an actionable re-pair warning in Setup.
+`rePairRequired` survives process restart and clears only through an
+explicit Setup action ("Mark as updated") after the operator updates
+`~/.hermes/secrets/ackline-fid` with the current FID.
+
+No automatic provisioning and no server-side FID registry.
 
 ---
 
@@ -414,24 +458,38 @@ Operational failure; no false sent state.
 Existing Phase 5 fail-closed behavior.
 
 ### Tailscale unavailable
-Push still works; ACK waits/retries.
+Push still works; ACK waits/retries; event-driven recovery skips and
+retries via WorkManager backoff.
+
+### Tailnet unreachable from default app network
+Explicit VPN Network binding (Phase 7 Change G1) routes tailnet HTTPS
+through the active VPN; no fallback to the public/default network for
+tailnet endpoints.
 
 ---
 
 ## 14. Scheduler Constraint
 
-The actual Hermes scheduler is part of the production architecture. The
-existing on-demand Hermes AI/gateway invocation remains the scheduler; Phase 6
-adds no cron, launchd, polling, or periodic retry process.
+The actual Hermes scheduler is part of the production architecture: the
+existing Hermes built-in cron/gateway scheduler, job `86c14bbbe300`
+("Personal Admin"), cadence **q120m**. It was paused during Phase 7 QA and
+is **re-enabled**. No duplicate scheduler/job was created; cadence and
+configured path unchanged.
 
-Phase 6 must use its real:
+Important repository distinction: the Hermes Agent scheduler/runtime
+(HEAD `96ed0e71ea`) and the Hermes Personal Admin checkout
+(`fab085d7400…`) are **DIFFERENT repositories**. Do not claim that
+`fab085d` must exist in hermes-agent history.
+
+Hermes must use its real:
 - interpreter;
 - environment;
 - working directory;
 - permissions;
 - cadence.
 
-A sender that works only from an interactive terminal is not production-ready.
+A sender that works only from an interactive terminal is not
+production-ready.
 
 ---
 
@@ -453,7 +511,7 @@ The existing SQLite outbox is already the queue.
 
 ---
 
-## 16. Phase 6 Completion State
+## 16. Phase 6 Completion State (HISTORY — remains CLOSED)
 
 Phase 6 is COMPLETE — CLOSED.
 
@@ -472,25 +530,22 @@ Hermes queue
 ntfy remains available as rollback until the Phase 8 real-world replacement
 gate.
 
-Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) adds
-Hermes bounded redelivery and event-driven Android reconciliation without
-changing the realtime path. Phase 7 is in PLANNING COMPLETE — REDESIGN V2
-state; its planned architecture is documented in §17 with "planned" labels
-until implementation lands.
+Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) is
+**implemented and merged**; its final architecture is documented in §17.
 
 ---
 
-## 17. Phase 7 Planned Architecture (Redesign V2) — Recovery and Reconciliation
+## 17. Phase 7 Implemented Recovery Architecture
 
-> Everything in this section is **planned architecture**, not deployed
-> code. Nothing here exists in production until its change unit lands and
-> passes review/QA.
+> This section documents the **implemented, merged, and physically
+> validated** Phase 7 architecture — not plans. See `docs/CURRENT_PHASE.md`
+> for per-change evidence (commits, merges, QA matrix).
 
-> **Redesign V2 note:** Phase 7 Change D uncovered a design failure — the
-> periodic WorkManager safety net was a dependency that should not exist.
-> This is a planning conclusion, not a product or runtime failure.
-> Periodic WorkManager is retired. Hermes bounded redelivery is the primary
-> recovery safety net.
+> **Redesign V2 history:** Phase 7 Change D uncovered a design failure —
+> the periodic WorkManager safety net was a dependency that should not
+> exist. This was a planning/design conclusion, not a product or runtime
+> failure, and not a proven RecoveryWorker bug. Periodic WorkManager is
+> retired; Hermes bounded redelivery is the primary recent-loss safety net.
 
 ### 17.1 Realtime path stays FCM
 
@@ -498,16 +553,17 @@ FCM remains the realtime transport. The recovery paths are Hermes bounded
 redelivery and event-driven Android reconciliation — never periodic
 WorkManager polling and never a replacement for push.
 
-### 17.2 Hermes bounded redelivery (NEW — Redesign V2)
+### 17.2 Hermes bounded redelivery (implemented)
 
-Hermes is responsible for redelivering recently accepted but
-unacknowledged notifications via FCM. This is the **primary** recovery
-safety net.
+Hermes redelivers recently accepted but unacknowledged notifications via
+FCM. This is the **primary** recent-loss safety net.
 
 ```text
 Hermes redelivery query
 → sent_at IS NOT NULL
 → acknowledged_at IS NULL
+→ canceled_at IS NULL
+→ committed run
 → within 6 hours of first sent_at
 → at least 2 hours since last_attempt_at
 → same notification_id
@@ -517,30 +573,37 @@ Hermes redelivery query
 → one notification on INSERTED
 ```
 
-Key properties:
+Key properties (validated):
+
 - `sent_at` is preserved as **first FCM acceptance** (never overwritten).
 - `send_attempts` and `last_attempt_at` are reused for tracking.
 - Redelivery copies use **NORMAL** FCM priority regardless of original
   level.
 - Same `notification_id` — Room `INSERT IGNORE` absorbs duplicates.
 - No Hermes DB migration — uses existing columns only.
-- No delivery-receipt protocol — Hermes does not require device
-  confirmation of receipt.
+- No delivery-receipt protocol.
 - Bounded by the 6-hour window — no infinite redelivery loop.
+- No exact +2h redelivery SLA; scheduler cadence is q120m while eligibility
+  is `last_attempt_at >= 2h`, so a cycle may skip until the next one.
 
-### 17.3 Event-driven Android recovery (planned)
+Physical proof: a lost-first synthetic canary was redelivered by real
+production FCM (`send_attempts` 1→2, `sent_at` preserved, `last_attempt_at`
+advanced, NORMAL priority), with Tailscale OFF and Oppo persisting and
+notifying without app opening.
+
+### 17.3 Event-driven Android recovery (implemented)
 
 ```text
 Hermes ack_server
 → GET /notifications/pending
-→ HTTPS/Tailscale
+→ explicit VPN Network HTTPS
 → RecoveryWorker
 → canonical AlertIngestion
 → Room INSERT IGNORE
 → notification on INSERTED
 ```
 
-Triggers (event-driven only):
+Triggers (event-driven only, all implemented):
 
 ```text
 A. onDeletedMessages()        → unique one-time recovery
@@ -562,7 +625,15 @@ C. FID registration/change    → unique one-time recovery
 - No periodic WorkManager. No foreground service, no AlarmManager, no
   exact alarms, no sockets, no MQTT.
 
-### 17.4 Recovery contract (planned)
+Physical proof: fresh install with empty Room and a stale Hermes FCM target
+pulled 4/4 server pending alerts via startup recovery over HTTPS/Tailscale;
+all decrypted and persisted; no FCM delivery could explain the rows.
+`POST_NOTIFICATIONS` was **not** granted during this run, so native
+notification presentation on the recovery path was not separately
+physically exercised; canonical `AlertIngestion` is shared with the
+separately proven FCM path.
+
+### 17.4 Recovery contract (implemented)
 
 - `GET /notifications/pending` on the existing Hermes `ack_server.py`;
 - same `Tailscale-User-Login` trusted identity boundary as ACK;
@@ -586,14 +657,14 @@ AND associated run.status = 'committed'
   `ciphertext`, built by `fcm_sender.build_envelope`); inner payload
   unchanged; no plaintext protocol; no new crypto.
 
-### 17.5 Canonical ingestion (planned)
+### 17.5 Canonical ingestion (implemented)
 
 A single `AlertIngestion` path shared by `FirebaseMessagingService` and
 `RecoveryWorker`: kid check → decrypt → inner decode → payload parse →
 `repository.insertIncoming` → native notification only on INSERTED.
 Mechanical reuse of the proven Phase 5/6 receive path.
 
-### 17.6 Failure taxonomy (planned)
+### 17.6 Failure taxonomy (implemented)
 
 - Transient (network, DNS, TLS, timeout, IOException, HTTP 408/429/5xx):
   `Result.retry()` for one-time workers, exponential WorkManager backoff.
@@ -602,26 +673,34 @@ Mechanical reuse of the proven Phase 5/6 receive path.
 - Per-item decrypt/validation failure: skip item, continue batch, no
   crash, no DB regression.
 
-### 17.7 FID / re-pair (planned)
+### 17.7 FID / re-pair (implemented)
 
-- Ackline persists the last observed FID. First observation → baseline,
-  `rePairRequired = false`. Later different FID → store new FID,
-  `rePairRequired = true`, enqueue recovery.
+- Ackline persists the last observed FID (`FidRePairStore`). First
+  observation → baseline, `rePairRequired = false`. Later different FID →
+  store new FID, `rePairRequired = true`, enqueue recovery.
 - Setup shows an actionable re-pair warning. `rePairRequired` survives
   process restarts and clears only through an explicit Setup action
-  ("Mark as updated") after the operator updates `~/.hermes/secrets/
-  ackline-fid` with the current FID.
+  ("Mark as updated") after the operator updates
+  `~/.hermes/secrets/ackline-fid` with the current FID.
 - No device registry, no server write for FID, no automatic provisioning.
+- FID re-pair was performed manually during final QA: uninstall/reinstall
+  generated a new FID and erased `FidRePairStore`, so the new FID became
+  the fresh-install baseline; FID-registration recovery executed and
+  succeeded; the operator manually updated
+  `~/.hermes/secrets/ackline-fid`; subsequent production FCM to the new
+  installation PASS. In-place changed-FID warning semantics
+  (later-FID-change → `rePairRequired = true` → Setup warning) were
+  **not** forced physically during final QA; they remain covered by unit
+  tests.
 
-### 17.8 Data rules (planned)
+### 17.8 Data rules (implemented)
 
-- No Room migration (schema stays v3) unless implementation uncovers a
-  concrete correctness requirement.
+- No Room migration (schema stays v3).
 - No `recovered_at`, server revisions, sync version, or tombstones.
 - No Hermes DB migration; recovery and redelivery derive from existing
   columns.
 
-### 17.9 Acceptance gates (Redesign V2)
+### 17.9 Validation outcome (final integration QA — PASS)
 
 Primary gate — Hermes bounded redelivery:
 
@@ -633,17 +712,74 @@ Hermes sent/unacknowledged
 → one native notification
 → duplicate harmless
 → Visto
-→ remote ACK
+→ remote ACK            PASS
 ```
 
-Secondary gate — event-driven recovery:
+Secondary gate — event-driven recovery (component-level evidence):
 
 ```text
 Hermes creates alert → FCM accepted → device never persists
 → later startup/onDeletedMessages/FID-change
 → one-time recovery executes WITHOUT manual app open
-→ missing row inserted → one notification shown → Visto
-→ ACK reaches Hermes
+→ missing row inserted (fresh-install 4/4)         PASS
+
+native notification presentation on recovery path:
+  not separately physically exercised in this fresh-install run
+  because POST_NOTIFICATIONS was not granted; canonical
+  AlertIngestion path is shared with the separately proven FCM path.
+
+Visto → remote ACK over explicit VPN:               PASS
+  separately physically proven by the G1 ACK canary; the four
+  recovered rows were not used for a Visto→ACK end-to-end test.
 ```
 
-**No acceptance gate requires waiting for a periodic WorkManager cycle.**
+Additional validated matrix:
+
+```text
+bounded FCM redelivery            PASS
+duplicate / idempotency           PASS
+local Visto while Tailscale OFF   PASS
+remote ACK over explicit VPN      PASS
+recovery GET over explicit VPN    PASS
+fresh-install recovery            PASS
+FID re-pair performed manually    PASS
+fresh-install realtime FCM        PASS
+duplicate realtime FCM ignored    PASS
+```
+
+**No acceptance gate required waiting for a periodic WorkManager cycle.**
+
+### 17.10 Honest limits
+
+Do **not** claim:
+
+- exact-once FCM;
+- exact +2h redelivery SLA;
+- indefinite autonomous recovery if every FCM attempt is lost and the app
+  never starts;
+- periodic WorkManager recovery;
+- delivery receipt semantics;
+- FID automatic provisioning;
+- that a single recovery run physically exercised the full chain
+  recovery → notification shown → Visto → ACK (component-level evidence
+  only; see §17.9);
+- that a non-empty physical ACK backlog was drained in Change G (worker
+  execution observed and succeeded; behavior covered by
+  implementation/tests);
+- that an in-place changed-FID rotation was forced physically during
+  final QA (covered by unit tests; physical FID evidence is the
+  fresh-install baseline + manual re-pair).
+
+The long-offline model is:
+
+```text
+FCM offline retention + bounded copies + event-driven reconciliation.
+```
+
+### 17.11 Operational follow-up (not part of Phase 7 closeout)
+
+`ack_server.py` lifecycle/supervision remains a separate operational
+concern: the listener disappeared once during QA and had to be restarted.
+The endpoint is functionally validated, but exact unattended
+lifecycle/supervision is not yet proven. No launchd/systemd/supervisor
+implementation exists yet; tracked as an operational follow-up only.

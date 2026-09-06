@@ -2,13 +2,14 @@
 
 ## 1. Status
 
-**ACTIVE — PLANNING COMPLETE — REDESIGN V2 — READY FOR CHANGE E**
+**IMPLEMENTATION COMPLETE — ALL CHANGES LANDED, REVIEWED, MERGED — FINAL QA PASS**
 
 Phase: `7 — Recovery and Reconciliation`
 
-Ackline branch: `dev`
+Ackline branch: `dev` — HEAD `b4488f9adb91985b50e052df9261fa9f4f9a20fc`
 
-Base branch: `dev`
+Hermes Personal Admin branch: `dev` — HEAD
+`fab085d7400499353c638f93d62aa4661330aa18`
 
 Phase 6 remains **COMPLETE — CLOSED** (Hermes merge
 `5b5777a827e097a98687bc6fae0060a2e6fcebb3`, Hermes tests 28/28 PASS,
@@ -16,24 +17,35 @@ Phase 6 remains **COMPLETE — CLOSED** (Hermes merge
 
 Phase 7 blockers: **0**.
 
-Implementation has **NOT** started. No implementation branches exist. No
-source, test, or database file has been modified by planning.
+All Phase 7 change units (A, B, C, E, F, G1) are implemented, reviewed,
+and merged to `dev`. Change G is integration QA/docs closeout, not a
+separate runtime source merge. Change D remains **ABORTED — DESIGN GATE
+FAILED** (historical record, retained). Final integration QA (Change G) is
+**PASS** — documentation closeout recorded by this documentation change.
 
-Current change:
+Final status:
 
 ```text
-Change E — Hermes Bounded FCM Redelivery
-NOT STARTED
+Change A  Hermes Recovery Contract              IMPLEMENTED / MERGED
+Change B  Android Reconciliation Core           IMPLEMENTED / MERGED
+Change C  Recovery Triggers + FID/Re-pair       IMPLEMENTED / MERGED
+Change D  Integration / Physical QA             ABORTED — DESIGN GATE FAILED (historical)
+Change E  Hermes Bounded FCM Redelivery         IMPLEMENTED / REVIEWED / MERGED — PASS
+Change F  Remove Periodic Recovery Dependency   IMPLEMENTED / REVIEWED / MERGED — PASS
+Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICALLY VALIDATED / MERGED — PASS
+Change G  Focused Integration QA / Docs         PASS — docs closeout executed
 ```
 
 ---
 
-## 2. Redesign V2 Context
+## 2. Redesign V2 Context (HISTORICAL RECORD — retained)
 
 Phase 7 Change D uncovered a **DESIGN failure**, not a proven
 RecoveryWorker bug. The periodic WorkManager safety net was a design
-dependency that should not exist. This is a planning conclusion, not a
-product or runtime failure.
+dependency that should not exist. This was a planning conclusion, not a
+product or runtime failure, and not a proven RecoveryWorker bug. Periodic
+WorkManager recovery is retired by Change F; Hermes bounded redelivery is
+the primary recent-loss safety net.
 
 Canonical redesign decisions:
 
@@ -66,7 +78,7 @@ reconciliation — not periodic WorkManager polling.
 
 ---
 
-## 4. Approved Architecture Contract (Redesign V2)
+## 4. Approved Architecture Contract (Redesign V2 — IMPLEMENTED)
 
 ### Recovery query (GET /notifications/pending)
 
@@ -88,7 +100,7 @@ Ordering:
 ORDER BY n.created_at ASC, n.notification_id ASC
 ```
 
-### Hermes bounded redelivery (NEW)
+### Hermes bounded redelivery (IMPLEMENTED)
 
 Hermes redelivers recently accepted but unacknowledged notifications via
 FCM. This is the primary recovery safety net.
@@ -224,8 +236,12 @@ Each change is a separate reviewable unit with SPEC / PLAN / TASKS / GATE.
 
 ### Change A — Hermes Recovery Contract
 
-**SUPERSEDED** by Change E for the redelivery portion. The
-`GET /notifications/pending` endpoint contract is retained.
+**IMPLEMENTED / MERGED.** The `GET /notifications/pending` endpoint
+remains an implemented production component; it is **not** superseded.
+Redelivery of sent/unacknowledged notifications is implemented separately
+in Change E.
+
+Hermes merge: `22e5b66aed5b372dbf5b2fd828c8a75e8d38522f`
 
 Repo: **Hermes Personal Admin**
 
@@ -256,12 +272,12 @@ Repo: **Hermes Personal Admin**
 
 #### TASKS
 
-- [ ] recovery query + deterministic ordering
-- [ ] endpoint route + identity boundary + headers
-- [ ] E2EE envelope responses
-- [ ] cap 200 / HTTP 409 semantics
-- [ ] server tests
-- [ ] no plaintext/secret logging verification
+- [x] recovery query + deterministic ordering
+- [x] endpoint route + identity boundary + headers
+- [x] E2EE envelope responses
+- [x] cap 200 / HTTP 409 semantics
+- [x] server tests
+- [x] no plaintext/secret logging verification
 
 #### GATE
 
@@ -278,7 +294,13 @@ Only after GATE passes may Change B integrate against it.
 
 ### Change B — Android Reconciliation Core
 
-**RETAINED** — no design change to the core reconciliation logic.
+**IMPLEMENTED / MERGED** — landed before the Redesign V2 redesign.
+`RecoveryRunner`, `RecoveryWorker`, canonical `AlertIngestion`, HTTPS
+recovery client, Room idempotency, and the ACK drain path all remain the
+implemented core.
+
+Ackline merge: `de91642f2e7f12d34aa61986a1a53c745218892f` ("add Phase 7
+notification reconciliation core")
 
 Repo: **Ackline**
 
@@ -306,13 +328,13 @@ Repo: **Ackline**
 
 #### TASKS
 
-- [ ] `AlertIngestion` extraction (push path unchanged)
-- [ ] HTTPS recovery client (timeouts, no-store, sanitized errors)
-- [ ] `RecoveryRunner` / `RecoveryWorker` + retry/backoff policy
-- [ ] one-time unique scheduling (`ExistingWorkPolicy.KEEP`)
-- [ ] idempotent Room ingestion (INSERTED → notify; DUPLICATE → nothing)
-- [ ] ACK drain enqueue after successful GET
-- [ ] unit tests: taxonomy, dedupe, ACK-state preservation
+- [x] `AlertIngestion` extraction (push path unchanged)
+- [x] HTTPS recovery client (timeouts, no-store, sanitized errors)
+- [x] `RecoveryRunner` / `RecoveryWorker` + retry/backoff policy
+- [x] one-time unique scheduling (`ExistingWorkPolicy.KEEP`)
+- [x] idempotent Room ingestion (INSERTED → notify; DUPLICATE → nothing)
+- [x] ACK drain enqueue after successful GET
+- [x] unit tests: taxonomy, dedupe, ACK-state preservation
 
 #### GATE
 
@@ -327,7 +349,12 @@ failure taxonomy proven
 
 ### Change C — Recovery Triggers + FID/Re-pair
 
-**MODIFIED** — periodic WorkManager trigger removed.
+**IMPLEMENTED / MERGED.** Startup, `onDeletedMessages`, and FID
+registration/change one-time recovery remain implemented. The periodic
+WorkManager trigger was removed by Change F.
+
+Ackline merge: `5f4d7348aa1d405f0939cfdcd09fcf719c403480` ("complete Phase 7 recovery triggers and FID
+re-pair flow")
 
 Repo: **Ackline**
 
@@ -353,12 +380,12 @@ Repo: **Ackline**
 
 #### TASKS
 
-- [ ] `onDeletedMessages` trigger
-- [ ] startup trigger
-- [ ] FID change trigger
-- [ ] FID persistence + `rePairRequired` semantics (restart-proof)
-- [ ] Setup warning + explicit clear action
-- [ ] unit tests: trigger determinism, restart persistence of
+- [x] `onDeletedMessages` trigger
+- [x] startup trigger
+- [x] FID change trigger
+- [x] FID persistence + `rePairRequired` semantics (restart-proof)
+- [x] Setup warning + explicit clear action
+- [x] unit tests: trigger determinism, restart persistence of
       `rePairRequired`
 
 #### GATE
@@ -373,7 +400,8 @@ FID change actionable
 
 ### Change D — Integration / Physical QA / Docs
 
-**ABORTED — DESIGN GATE FAILED.**
+**ABORTED — DESIGN GATE FAILED.** (HISTORICAL RECORD — retained. Not a
+product/runtime failure, not a proven RecoveryWorker bug.)
 
 Repos: **Ackline + Hermes**
 
@@ -388,7 +416,23 @@ Documentation closeout responsibilities are reassigned to Change G.
 
 ---
 
-### Change E — Hermes Bounded FCM Redelivery (NEW)
+### Change E — Hermes Bounded FCM Redelivery (IMPLEMENTED)
+
+**IMPLEMENTED / REVIEWED / MERGED — PASS.**
+
+Implementation commit: `61994c05a6fa7d8361c93ad941cd745d82723c80`
+
+Hermes dev merge: `fab085d7400499353c638f93d62aa4661330aa18`
+
+Physical evidence: lost-first synthetic canary redelivered by real
+production FCM — same `notification_id`, `send_attempts` 1→2, `sent_at`
+preserved, `last_attempt_at` advanced, NORMAL priority; Oppo persisted and
+notified without app opening; Tailscale OFF during this test.
+
+Scheduling nuance: Hermes scheduler cadence is q120m while eligibility is
+`last_attempt_at >= 2h`, so a scheduler cycle can occur slightly before the
+strict 2h boundary and skip until the next cycle. No exact +2h redelivery
+SLA; no guarantee of exactly three copies.
 
 Repo: **Hermes Personal Admin**
 
@@ -427,14 +471,14 @@ notifications via FCM:
 
 #### TASKS
 
-- [ ] redelivery eligibility query (existing columns only)
-- [ ] 6-hour window enforcement
-- [ ] 2-hour minimum gap enforcement
-- [ ] `sent_at` preservation (never overwrite)
-- [ ] `send_attempts` / `last_attempt_at` reuse
-- [ ] NORMAL FCM priority on redelivery copies
-- [ ] same `notification_id` on redelivery
-- [ ] server tests: eligibility, timing, priority, idempotency
+- [x] redelivery eligibility query (existing columns only)
+- [x] 6-hour window enforcement
+- [x] 2-hour minimum gap enforcement
+- [x] `sent_at` preservation (never overwrite)
+- [x] `send_attempts` / `last_attempt_at` reuse
+- [x] NORMAL FCM priority on redelivery copies
+- [x] same `notification_id` on redelivery
+- [x] server tests: eligibility, timing, priority, idempotency
 
 #### GATE
 
@@ -452,7 +496,18 @@ Only after GATE passes may Change G integrate against it.
 
 ---
 
-### Change F — Ackline Remove Periodic Recovery Dependency (NEW)
+### Change F — Ackline Remove Periodic Recovery Dependency (IMPLEMENTED)
+
+**IMPLEMENTED / REVIEWED / MERGED — PASS.**
+
+Implementation commit: `005c40c551a9bec71ee63c9579f5a65a20cc7829`
+
+Ackline dev merge: `7cfc9be6853d5fc826757b84ec444e29c3a0e133`
+
+Implemented facts: periodic recovery scheduling removed; legacy unique work
+`ackline-notification-recovery-periodic` cancelled on startup/update;
+one-time recovery remains event-driven; no periodic WorkManager recovery
+dependency. `./gradlew assembleDebug` passes.
 
 Repo: **Ackline**
 
@@ -476,11 +531,11 @@ Repo: **Ackline**
 
 #### TASKS
 
-- [ ] cancel `ackline-notification-recovery-periodic` on app start/update
-- [ ] remove periodic WorkManager scheduling code
-- [ ] remove periodic recovery configuration
-- [ ] verify event-driven triggers unchanged
-- [ ] `./gradlew assembleDebug` passes
+- [x] cancel `ackline-notification-recovery-periodic` on app start/update
+- [x] remove periodic WorkManager scheduling code
+- [x] remove periodic recovery configuration
+- [x] verify event-driven triggers unchanged
+- [x] `./gradlew assembleDebug` passes
 
 #### GATE
 
@@ -493,15 +548,98 @@ event-driven recovery unchanged
 
 ---
 
-### Change G — Focused Integration QA / Docs Closeout (NEW)
+### Change G1 — Explicit Tailnet HTTPS VPN Binding (IMPLEMENTED)
+
+**IMPLEMENTED / REVIEWED / PHYSICALLY VALIDATED / MERGED — PASS.**
+
+Implementation commit: `a3c9ea07ac0f6584f42303cdba1cf722c1c5da1b`
+
+Ackline dev merge: `b4488f9adb91985b50e052df9261fa9f4f9a20fc`
+
+Repo: **Ackline**
+
+#### Root cause (proven before fix)
+
+`APP_UID_TAILNET_ROUTING_FAILURE_PROVEN` — the default/implicit app
+network path could not reach the Mac tailnet, while the device shell path
+could.
+
+#### Fix
+
+`TailnetHttpsConnectionFactory` → `ConnectivityManager` active VPN
+`Network` → `vpnNetwork.openConnection(url)`. No process-wide binding, no
+hardcoded Tailscale IP, no TLS weakening, no fallback to public/default
+network for tailnet endpoints.
+
+#### Physical proof
+
+- `POST /ack` — `EXPLICIT_VPN_ACK_PROVEN = YES`:
+  `AckSyncRunner → HttpsAckRemoteClient → VPN Network.openConnection →
+  Tailscale Serve → ack_server → Hermes acknowledged_at`.
+- `GET /notifications/pending` — `EXPLICIT_VPN_RECOVERY_PROVEN = YES`:
+  fresh install, Room initially empty, Hermes FCM target stale, 4 server
+  pending alerts; startup recovery pulled 4/4 via HTTPS/Tailscale; all
+  decrypted and persisted; WorkManager recovery succeeded; no FCM delivery
+  could explain these rows.
+
+---
+
+### Change G — Focused Integration QA / Docs Closeout (COMPLETE)
+
+**PASS** — documentation closeout recorded by this documentation change.
 
 Repos: **Ackline + Hermes**
 
 #### SPEC
 
 Focused integration QA validating the Redesign V2 acceptance path, physical
-OppO matrix for the redesigned recovery flow, and Phase 7 documentation
-closeout.
+Oppo matrix for the redesigned recovery flow, and Phase 7 documentation
+closeout. All executed.
+
+Validated physical matrix:
+
+```text
+bounded FCM redelivery            PASS
+local Visto while Tailscale OFF   PASS
+remote ACK over explicit VPN      PASS
+recovery GET over explicit VPN    PASS
+fresh-install recovery            PASS
+FID re-pair performed manually    PASS
+fresh-install realtime FCM        PASS
+duplicate realtime FCM ignored    PASS
+duplicate / idempotency           PASS
+```
+
+Fresh-install realtime FCM proof: current FID matched Hermes config;
+production `fcm_sender.send_notification` used; Firebase accepted; Ackline
+received; E2EE decrypted; duplicate detected; Room unchanged; no duplicate
+notification.
+
+Recovery-path scope (component-level evidence — no overclaim):
+
+- Event-driven recovery transport + ingestion: **PASS** — Room initially
+  empty, Tailscale ON, Hermes had 4 pending alerts, startup recovery GET
+  executed through the explicit VPN Network, 4/4 envelopes decrypted and
+  persisted, WorkManager recovery succeeded. FCM could not explain
+  delivery because the Hermes target FID was stale.
+- Native notification presentation on the recovery path: **not
+  separately physically exercised** in this fresh-install run because
+  `POST_NOTIFICATIONS` was not granted; the canonical `AlertIngestion`
+  path is shared with the separately proven FCM path.
+- Remote ACK: **separately physically proven by the G1 ACK canary**; the
+  four recovered rows were not used for a Visto→ACK end-to-end test.
+- ACK sync after recovery: a successful `RecoveryRunner` enqueues
+  `AckSyncScheduler`; after fresh recovery, actual ack-sync workers ran
+  and **SUCCEEDED**, but the fresh Room contained no locally
+  acknowledged pending ACK backlog to drain — a non-empty physical
+  backlog was not separately exercised in Change G.
+- FID: uninstall/reinstall generated a new FID and erased
+  `FidRePairStore`, so the new FID became the fresh-install baseline;
+  FID-registration recovery executed and succeeded; the operator manually
+  updated `~/.hermes/secrets/ackline-fid`; subsequent production FCM to
+  the new installation PASS. In-place changed-FID warning semantics
+  (later-FID-change → `rePairRequired = true`) were **not** forced
+  physically during final QA; they remain covered by unit tests.
 
 #### PLAN
 
@@ -509,22 +647,34 @@ closeout.
 - Physical Oppo matrix for Redesign V2 acceptance path:
   - Hermes sent/unacknowledged → bounded redelivery → same notification_id
     → Room INSERT once → one native notification → duplicate harmless →
-    Visto → remote ACK.
+    Visto → remote ACK. (PASS — bounded redelivery canary)
   - Event-driven recovery: startup/onDeletedMessages/FID-change triggers
-    → one-time recovery → missing row inserted → notification shown.
-  - ACK backlog drain after recovery.
-  - FID change → re-pair → recovery flow.
+    → one-time recovery → missing row inserted (fresh-install 4/4).
+    Native notification presentation on the recovery path was not
+    separately physically exercised (`POST_NOTIFICATIONS` not granted);
+    canonical `AlertIngestion` is shared with the separately proven FCM
+    path.
+  - ACK backlog drain after recovery: behavior covered by
+    implementation/tests. After fresh recovery, actual ack-sync workers
+    ran and succeeded, but the fresh Room had no locally acknowledged
+    pending backlog to drain; a non-empty physical backlog was not
+    separately exercised in Change G.
+  - FID change → re-pair → recovery: fresh-install FID registration +
+    manual Hermes re-pair + recovery (PASS). In-place changed-FID
+    warning semantics were not forced physically during final QA; they
+    remain covered by unit tests.
 - Documentation closeout: update all four docs to implemented state.
 
 #### TASKS
 
-- [ ] Hermes redelivery → Ackline end-to-end
-- [ ] physical Oppo: redelivery acceptance matrix
-- [ ] physical Oppo: event-driven recovery matrix
-- [ ] duplicate FCM + redelivery harmless
-- [ ] ACK backlog drain
-- [ ] FID change → re-pair → recovery
-- [ ] documentation closeout (all four docs)
+- [x] Hermes redelivery → Ackline end-to-end
+- [x] physical Oppo: redelivery acceptance matrix
+- [x] physical Oppo: event-driven recovery matrix (transport + ingestion;
+      presentation via canonical shared path, not separately forced)
+- [x] duplicate FCM + redelivery harmless
+- [x] recovery success enqueues ACK sync; worker execution observed
+- [x] fresh-install FID registration + manual Hermes re-pair + recovery
+- [x] documentation closeout (all four docs)
 
 #### GATE
 
@@ -539,11 +689,15 @@ Redesign V2 acceptance path PASS:
   → Visto
   → remote ACK
 
-Event-driven recovery PASS:
+Event-driven recovery PASS (component-level):
   startup/onDeletedMessages/FID-change
-  → one-time recovery
-  → missing row inserted
-  → notification shown
+  → one-time recovery executes without manual app open
+  → missing row inserted (fresh-install 4/4)
+
+Recovery-path presentation:
+  not separately physically exercised in this fresh-install run
+  (POST_NOTIFICATIONS not granted); canonical AlertIngestion is shared
+  with the separately proven FCM path.
 
 Documentation closeout:
   all four docs updated to implemented state
@@ -561,14 +715,17 @@ F before G              (periodic removal must land before integration QA)
 G after A+B+C+E+F      (reviewed and landed)
 ```
 
-Change A and Change E live in the Hermes repo. Changes B, C, and F live in
-the Ackline repo. Change G spans both.
+Change A and Change E live in the Hermes repo. Changes B, C, F, and G1 live
+in the Ackline repo. Change G spans both.
+
+All dependencies were fulfilled; every change landed and merged to `dev`
+(Ackline `b4488f9…`, Hermes Personal Admin `fab085d…`).
 
 ---
 
-## 7. Branch Strategy (conceptual — NOT created)
+## 7. Branch Strategy (HISTORICAL — executed and merged)
 
-Review branches for implementation:
+Review branches for implementation (all merged to `dev`):
 
 ```text
 Hermes:  7a-recovery-contract (retained)
@@ -594,11 +751,13 @@ dev
 → merge to dev
 ```
 
-Branches are **not** created by this planning session.
+Branches were created/reviewed/merged according to this flow; the
+planning session itself created none. Branch deletion state is not
+asserted.
 
 ---
 
-## 8. Validation Commands
+## 8. Validation Commands (executed — see per-change evidence in §5)
 
 ### Hermes (Changes A, E, D-equivalent)
 
@@ -652,16 +811,46 @@ before starting the matrix.
 
 ---
 
-## 11. Implementation Status
+## 11. Final Implementation Status
 
 ```text
-Change A  Hermes Recovery Contract            SUPERSEDED by E (endpoint retained)
-Change B  Android Reconciliation Core         NOT STARTED
-Change C  Recovery Triggers + FID/Re-pair     NOT STARTED (periodic removed)
-Change D  Integration / QA / Docs             ABORTED — DESIGN GATE FAILED
-Change E  Hermes Bounded FCM Redelivery       NOT STARTED
-Change F  Remove Periodic Recovery Dependency  NOT STARTED
-Change G  Focused Integration QA / Docs       NOT STARTED
+Change A  Hermes Recovery Contract              IMPLEMENTED / MERGED
+Change B  Android Reconciliation Core           IMPLEMENTED / MERGED
+Change C  Recovery Triggers + FID/Re-pair       IMPLEMENTED / MERGED
+Change D  Integration / QA / Docs               ABORTED — DESIGN GATE FAILED (historical)
+Change E  Hermes Bounded FCM Redelivery         IMPLEMENTED / REVIEWED / MERGED — PASS
+Change F  Remove Periodic Recovery Dependency   IMPLEMENTED / REVIEWED / MERGED — PASS
+Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICALLY VALIDATED / MERGED — PASS
+Change G  Focused Integration QA / Docs         PASS — docs closeout executed
 ```
 
-Current change: **Change E — Hermes Bounded FCM Redelivery**.
+Current change: **none — Phase 7 implementation is complete.**
+
+---
+
+## 12. Post-Implementation Operating State
+
+- Hermes scheduler job `86c14bbbe300` ("Personal Admin", Hermes built-in
+  cron/gateway scheduler, cadence q120m) was paused since Aug 27 during QA
+  and is **re-enabled**; cadence and configured path unchanged; no
+  duplicate scheduler/job created. A native scheduler run completed
+  successfully after repairing the existing Google OAuth
+  (`InstalledAppFlow`, `gmail.readonly`, `calendar.readonly`,
+  `tasks.readonly`, no write scopes added, `invalid_grant` repaired);
+  `notification_state.py` dispatch was reached with `ACTIVE_TRANSPORT =
+  "fcm"`; scheduler completed successfully with q120 cadence preserved.
+- **Repository distinction:** Hermes Agent scheduler/runtime HEAD
+  `96ed0e71ea` and Hermes Personal Admin checkout `fab085d7400…` are
+  DIFFERENT repositories; do not claim `fab085d` exists in hermes-agent
+  history.
+- **Operational follow-up (not closed by Phase 7):** `ack_server.py`
+  lifecycle/supervision is a separate operational concern — the listener
+  disappeared once during QA and had to be restarted. The endpoint itself
+  is functionally validated, but exact unattended lifecycle/supervision is
+  not yet proven. No launchd/systemd/supervisor implementation is invented
+  here; the follow-up is recorded only.
+- **Honest claims:** do not claim exact-once FCM, an exact +2h redelivery
+  SLA, indefinite autonomous recovery when every FCM attempt is lost and
+  the app never starts, periodic WorkManager recovery, delivery-receipt
+  semantics, or FID automatic provisioning. Long-offline model: FCM
+  offline retention + bounded copies + event-driven reconciliation.

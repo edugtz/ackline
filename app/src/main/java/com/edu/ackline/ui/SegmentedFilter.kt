@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -31,9 +30,9 @@ data class SegmentedOption(
  *
  * One shared rounded track; the selected segment is a visibly filled
  * teal-tonal pill, inactive segments stay quiet. Replaces bare Material
- * TabRow underlines. Each segment is an equal-weight, full-height
- * (>= 48dp) selectable target so touch targets stay accessibility-safe
- * while the pill geometry remains compact.
+ * TabRow underlines. Each segment outer selectable is explicitly 48dp tall
+ * (full track height); the visual pill inside stays compact at 42dp so the
+ * track hairline remains visible. No overlapping clickables.
  */
 @Composable
 fun SegmentedFilter(
@@ -50,8 +49,9 @@ fun SegmentedFilter(
             .fillMaxWidth()
             .height(48.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerLowest, outerShape)
-            .padding(3.dp),
+            .padding(horizontal = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         options.forEachIndexed { index, option ->
             Segment(
@@ -88,22 +88,29 @@ private fun RowScope.Segment(
 
     Box(
         modifier = modifier
-            .fillMaxHeight()
+            .height(48.dp)
             .selectable(
                 selected = selected,
                 role = Role.Tab,
                 onClick = onClick,
-            )
-            .background(container, shape),
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = option.label,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            color = content,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(42.dp)
+                .background(container, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = option.label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = content,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -78,7 +80,7 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                 .verticalScroll(rememberScrollState())
                 .padding(contentPadding)
                 .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             // ── Status summary — honest aggregate of the rows below only.
             val registrationReady =
@@ -178,6 +180,9 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                         if (installationId != null) {
                             OutlinedButton(
                                 onClick = { copyDeviceId(context, installationId) },
+                                // Default M3 button height is 40dp; enforce a
+                                // >= 48dp effective touch target.
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                             ) {
                                 Text("Copiar")
                             }
@@ -242,13 +247,15 @@ private fun SetupSection(
     quiet: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = title.uppercase(),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 1.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),

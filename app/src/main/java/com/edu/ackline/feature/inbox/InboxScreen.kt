@@ -1,6 +1,8 @@
 package com.edu.ackline.feature.inbox
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,9 +14,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -26,10 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -306,6 +316,10 @@ private fun AlertCard(
 /**
  * Compact acknowledgment pill — the card-level "Visto" action.
  * Same callback semantics as before; only the visual weight changed.
+ * Quiet surface-toned pill with a complete high-contrast semantic ink
+ * (surfaceContainerHigh/onSurface) for >=4.5:1 normal-text contrast in
+ * both themes; hairline border keeps it quiet and clearly actionable
+ * without competing with the selected segmented control.
  * Visual geometry stays compact while the hit area is enforced to
  * >= 48dp via minimumInteractiveComponentSize.
  */
@@ -328,13 +342,19 @@ private fun VistoPill(
     ) {
         Surface(
             shape = RoundedCornerShape(50),
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant,
+            ),
         ) {
             Text(
                 text = "Visto",
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
             )
         }
@@ -346,31 +366,77 @@ private fun EmptyInbox(
     filter: InboxFilter,
     modifier: Modifier = Modifier,
 ) {
+    // Restrained centered composition: small teal-tonal check accent drawn
+    // with existing Compose primitives (no new assets) + concise copy.
+    // Vertically scrollable so extreme font scale / short viewports cannot
+    // silently clip content; centered when content fits.
     Column(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 32.dp, vertical = 48.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.Center,
     ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                val checkInk = MaterialTheme.colorScheme.onSecondaryContainer
+                Canvas(modifier = Modifier.size(20.dp)) {
+                    val path = Path().apply {
+                        moveTo(size.width * 0.20f, size.height * 0.55f)
+                        lineTo(size.width * 0.42f, size.height * 0.76f)
+                        lineTo(size.width * 0.80f, size.height * 0.28f)
+                    }
+                    drawPath(
+                        path = path,
+                        color = checkInk,
+                        style = Stroke(
+                            width = size.minDimension * 0.10f,
+                            cap = StrokeCap.Round,
+                        ),
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Text(
             text = if (filter == InboxFilter.PENDING) {
-                "No hay alertas pendientes"
+                "Todo al día"
             } else {
                 "Aún no hay alertas vistas"
             },
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
         )
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = if (filter == InboxFilter.PENDING) {
-                "Las alertas nuevas aparecerán aquí."
+                "No tienes alertas pendientes."
             } else {
-                "Las alertas aparecerán aquí hasta que las marques como vistas."
+                "Las alertas que marques como vistas aparecerán aquí."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
         )
     }
 }

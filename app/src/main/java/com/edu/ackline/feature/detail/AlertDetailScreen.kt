@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -176,11 +177,14 @@ private fun AlertDetailContent(
 
     // ACK action area — pending cards only; local ACK + eventual remote ACK
     // semantics are unchanged (callback wiring identical to previous version).
+    // Complete semantic pair secondaryContainer/onSecondaryContainer for
+    // >=4.5:1 normal-text contrast in both themes; effective height >= 48dp.
     if (isPending) {
         Spacer(modifier = Modifier.height(18.dp))
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .defaultMinSize(minHeight = 48.dp)
                 .clickable(
                     role = Role.Button,
                     onClick = onAcknowledge,
@@ -192,10 +196,12 @@ private fun AlertDetailContent(
             Text(
                 text = "Marcar como vista",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 15.dp),
+                    .padding(vertical = 13.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
         }

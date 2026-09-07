@@ -42,7 +42,8 @@ no CLI syntax in Android UX
 the three honest steps ahead (permiso → emparejar → listo), one primary
 action (`Empezar`). No technical terms. No skipping ahead that
 circumvents permission/pairing — leaving the flow just lands on the same
-gate later (see §2).
+gate later while unpaired (see §2). After pairing, denied permission
+does not prevent entry to Inbox.
 
 **2. Notificaciones.** Explains, in one short paragraph, that Ackline
 needs notification permission to show Hermes alerts. One primary action
@@ -104,83 +105,70 @@ its reader is the operator at the Mac.
 
 ## 2. First-Run Routing — Derived Gate, No Viewed-Flag
 
-Current reality: the app always starts at Inbox (`AcklineApp` defaults
-to `AppScreen.Inbox`). P2B adds a **derived onboarding gate**: onboarding
-shows when the device is not yet in a usable paired state; it is never
-driven by "the wizard was viewed".
+P2B adds a derived onboarding gate, never an `onboardingCompleted` flag.
+Pairing identity is durable; current runtime readiness is a separate concern.
 
-### Readiness signals (all real system state)
+### Signals and transitions
 
-```text
-notificationGranted   permission state, lifted into shared state (§3)
-registrationReady     Firebase registration == Ready
-installationId        current installation ID available (non-null)
-encryptionReady       PayloadKeyStore ready for the production kid
-fidBaseline           pairing/FID baseline confirmed (lastObservedFid set)
-rePairClear           rePairRequired == false
-ackProvisioned        runtime ACK URL provisioned by pairing
-```
-
-`ackProvisioned` needs a genuine signal: `AckBaseUrlProvider` today only
-exposes `getBaseUrl()` with silent `BuildConfig` fallback, so
-"provisioned by pairing" is not observable. PLAN A1 therefore adds a
-small read API (e.g. `isProvisioned()` / `hasProvisionedBaseUrl()`).
-The legacy `BuildConfig` fallback may keep ACK operational on old
-installs, but a fresh guided pairing must still distinguish
-"provisioned" where readiness copy claims it — **do not fabricate
-success** by treating fallback as paired.
-
-### Derived states (conceptual; implementation may refine names to match
-actual state ownership)
-
-```text
-UNPAIRED / SETUP_REQUIRED
-   pairing prerequisites/capability incomplete → guided onboarding
-PAIRING_READY_BUT_PERMISSION_MISSING
-   paired, everything provisioned, notification permission denied
-REPAIR_REQUIRED
-   paired before, rePairRequired == true now
-READY
-   fullyReady → the ONLY state that displays "Todo listo"
-```
+- `hasConfirmedPairing` reads an explicit durable `serverPairingConfirmed`
+  signal (exact implementation name may vary).
+- First FID observation: `FidRePairStore.observe()` stores `lastObservedFid`,
+  but confirmation remains false. Observing a FID is NOT server pairing.
+- Successful `PairingProvisioner` completion: key imported, runtime ACK URL
+  persisted, `confirmServerPairing` succeeds, then durable confirmation is true.
+  Partial local finalization must not create a new confirmation.
+- Later FID change: preserve prior confirmed-pairing knowledge and set
+  `rePairRequired = true`; this is not a never-paired installation.
+- `registrationReady` means current Firebase registration is Ready;
+  `installationId` is the current available ID. Temporary cold-start Waiting
+  never erases confirmed identity or restarts first-run onboarding.
+- `encryptionReady` means the production key is ready; `ackProvisioned`
+  means a runtime ACK URL was provisioned. Add a small provisioned-state read
+  API to `AckBaseUrlProvider`; its BuildConfig fallback is not pairing evidence.
+- `notificationGranted` is current permission state shared by routing and Ajustes.
 
 ### Definitions
 
 ```text
-pairingConfigured =
-    registrationReady
-    && installationId != null
+hasConfirmedPairing = durable serverPairingConfirmed
+
+pairingHealthy =
+    hasConfirmedPairing
     && encryptionReady
-    && fidBaseline
     && ackProvisioned
-    && rePairClear
+    && !rePairRequired
 
 fullyReady =
-    pairingConfigured
+    pairingHealthy
+    && registrationReady
+    && installationId != null
     && notificationGranted
 ```
 
-`fidBaseline` = pairing/FID baseline confirmed (`lastObservedFid` set).
-`rePairClear` = `rePairRequired == false`. `ackProvisioned` = runtime ACK
-URL provisioned by pairing — see below; the legacy `BuildConfig`
-fallback may keep ACK operational on old installs, but it must never
-masquerade as guided-pairing completion.
+### Routing
 
-### Routing rules
+- `!hasConfirmedPairing` → first-run onboarding.
+- `hasConfirmedPairing && rePairRequired` → normal app with prominent re-pair
+  path in Ajustes, never an automatic first-run wizard.
+- Confirmed pairing without re-pair required, permission denied → normal app,
+  incomplete setup and permission CTA in Ajustes; never `Todo listo`.
+- Healthy confirmed pairing → normal Inbox, including temporary registration
+  Waiting. Other missing readiness signals retain normal app access with an
+  incomplete setup status and appropriate repair guidance.
+- Only `fullyReady` permits Listo / `Todo listo`, in onboarding or Ajustes.
 
-- Pairing incomplete (`pairingConfigured == false` because a pairing
-  prerequisite is missing, or `rePairClear == false` on a never-paired
-  device) → **onboarding** root instead of Inbox.
-- Pairing established but `rePairRequired == true` → **normal app +
-  prominent Ajustes re-pair entry**. The full first-run wizard does NOT
-  restart automatically.
-- Pairing established but notification permission denied → normal app
-  remains usable, setup status reads incomplete, permission retry stays
-  visible; **never shows `Todo listo`**.
-- Only `fullyReady` displays `Todo listo` (Ajustes Estado and onboarding
-  Listo alike).
-- No `onboardingCompleted=true` flag is added anywhere. "Ready" means
-  the signals above, not wizard completion.
+### Existing P2A installation bootstrap (mandatory A1 gate)
+
+The working, proven P2A installation predates the explicit confirmation flag.
+A1 must define a bounded, one-time app-private pairing-state migration before
+editing: inspect actual durable P2A state ownership and select the strongest
+available evidence. Preserve recognition of the proven P2A installation without
+falsely confirming fresh installs. A FID observation alone and a BuildConfig ACK
+fallback alone are each insufficient. This is not a Room or broad DB migration.
+The exact evidence predicate, migration ordering and repeat-run behavior are an
+A1 pre-edit decision gate; if existing state cannot distinguish confirmed P2A
+from unpaired state, stop and resolve that ambiguity before implementing it.
+No wizard-completed flag may substitute for confirmation.
 
 ---
 
@@ -192,11 +180,13 @@ masquerade as guided-pairing completion.
   - does **not** technically block scanning/claiming (pairing needs
     tailnet, not notifications);
   - **does** block the final `Listo` / `Todo listo` state — denial plus
-    successful pairing yields an honest pending state, never success;
+    successful pairing allows entry to Inbox with incomplete setup and an
+    Ajustes permission CTA, never Listo;
   - shows a retry route (`Volver a solicitar` + guidance to system
     settings if permanently denied);
-  - does not nag: ask via system dialog at most twice, then rest as a
-    quiet pending row until the user acts.
+  - no automatic repeated prompts; after denial, retry only from explicit
+    user action; permanent denial leads to system Settings guidance.
+    No persisted prompt-count state or artificial prompt limit is added.
 - Permission state is lifted out of the composable `remember` into
   shared readiness state so the gate (§2) and Ajustes read one source.
 - No P2C self-test is triggered here. The P2A finding (native display
@@ -249,6 +239,17 @@ key, FID, ACK token, Firebase credential, service-account data,
 notification content, or `ack_base_url` (the ACK URL arrives later
 inside the authenticated claim *response*).
 
+### Operator output contract
+
+Default `pairing-begin` retains existing machine JSON stdout unchanged,
+including the token once, with script/pipe compatibility. `pairing-begin --qr`
+is interactive HUMAN QR MODE: terminal QR and instructions, never additional
+plaintext token JSON on either stream. Human text contains no raw token,
+session secret, E2EE key or FID. QR output itself is sensitive and ephemeral,
+not pipe-safe; discourage redirecting/persisting it. TTL, single-use and revoke
+bound captured-QR risk. PLAN H1 defines the minimal direct-dependency declaration
+with pinned segno, no vendoring or blind venv snapshot.
+
 ### v1 parser behavior (normative)
 
 Required fields: `v`, `endpoint`, `session_id`, `token`.
@@ -265,12 +266,18 @@ token        non-blank, bounded (<= 512, matching P2A limits)
 
 - Unknown extra JSON fields are **ignored** (forward compatibility)
   while required v1 fields are strictly validated.
-- Non-JSON QR content, wrong version, or any field violation → the
-  malformed-QR error (§7), never a claim attempt.
+- Clearly unrelated/non-Ackline QR, including unrelated non-JSON content →
+  stay in scanner with quiet guidance: "Este QR no es de Ackline".
+- Ackline-shaped JSON / v1 payload that fails validation → explicit invalid-QR
+  error (§7), never a claim. A future version → unsupported/invalid Ackline QR
+  error. The parser/scanner must distinguish unrelated input from invalid
+  Ackline input consistently.
 - The parsed model carries a **redacted `toString()`** (no
   token/session/endpoint contents).
-- The one-time token is **never persisted** — memory only, cleared
-  after the claim attempt. Process death loses it by design (§6).
+- The token is never persisted or logged. Its reference is discarded after
+  claim/use; mutable byte buffers are cleared where applicable. Immutable JVM
+  `String` values cannot be promised secure zeroization. Process death loses
+  the token by design (§6); retry may require rescanning the QR.
 
 Token protection remains H1's boundary (short TTL, single-use atomic
 consume, revoke support) — unchanged by P2B.
@@ -306,7 +313,9 @@ Pairing → Error → (retry same QR | new QR | operator fix)
 Classification (normative). No message exposes HTTP codes, FID, session
 id, token, file paths, Firebase terminology, or CLI flags.
 
-**RETRY SAME QR** — transient, nothing burned:
+**RETRY SAME QR** — only clearly pre-consumption failures (for example,
+Tailscale unavailable before the request reaches Hermes), or rate limiting
+where the session remains valid:
 
 ```text
 transport failure / Tailscale unavailable:
@@ -324,13 +333,13 @@ rate-limited (after waiting):
 
 ```text
 expired:
-"Este código caducó. Genera un nuevo QR en tu Mac."
+"Este QR caducó. Genera un nuevo QR en tu Mac."
 
 consumed / replayed:
-"Este código ya fue usado. Genera un nuevo QR en tu Mac."
+"Este QR ya fue usado. Genera un nuevo QR en tu Mac."
 
-invalid session/token, malformed QR, invalid response:
-"Este código no es válido. Genera un nuevo QR en tu Mac."
+invalid session/token, malformed Ackline QR, invalid response:
+"Este QR no es válido. Genera un nuevo QR en tu Mac."
 ```
 
 **REPLACEMENT QR REQUIRED:**
@@ -350,20 +359,25 @@ Mac."
 (no retry loop; no technical detail on-device)
 ```
 
-**LOCAL PROVISIONING ISSUE** — claim reached the server, local
-finalization failed (retry may succeed; fresh QR if repeated):
+**LOCAL FINALIZATION FAILURE → NEW QR REQUIRED:**
+
+Hermes consumes the session before Android finalization. `KeyImportFailed`,
+`AckBaseUrlPersistenceFailed`, `FidConfirmationFailed`, and invalid local
+provisioning state after server 200 must all require a fresh session:
 
 ```text
-key import:
-"No se pudo guardar la clave en el teléfono. Vuelve a intentarlo o
-genera un nuevo QR."
-
-ACK URL persistence:
-"No se pudo guardar la dirección de Hermes. Vuelve a intentarlo."
-
-FID confirmation:
-"El emparejamiento no se pudo confirmar. Vuelve a intentarlo."
+"No se pudo completar el emparejamiento. Genera un nuevo QR en tu Mac."
 ```
+
+Never offer same-QR retry after successful remote claim. H1 fresh pairing with
+that same current FID is idempotent, so a new session is supported.
+
+**AMBIGUOUS TRANSPORT OUTCOME:** a request may have reached Hermes before a
+network failure. Allow at most one same-QR retry without promising that the
+session is valid; if consumed, the next response is CONSUMED → new QR.
+Invalid response is conservatively new QR because consumption cannot be ruled
+out. Server misconfiguration requires operator correction, not a retry loop;
+use a new session if validity cannot be established after correction.
 
 ---
 

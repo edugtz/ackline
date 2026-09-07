@@ -13,7 +13,9 @@ P2B-A2  Scanner / re-pair / hardening   (+ CameraX/ZXing deps)
 P2B-QA  Physical Oppo product gate      (mandatory before PASS)
 ```
 
-Gates: **H1 merges before Android QR physical integration. A1 merges
+Gates: **Accepted planning review and the user-owned planning commit block
+all production implementation until complete (TASKS, immediately after PRECHECK).
+H1 merges before Android QR physical integration. A1 merges
 before the A2 branch. A2 cannot PASS without physical Oppo QA. P2B
 cannot COMPLETE with native notification still unproven after permission
 is granted.**
@@ -36,18 +38,15 @@ claim-endpoint, rate-limit, or crypto change.
   revoke pointer).
 - Compose the full pairing endpoint server-side from the existing
   `ACK_BASE_URL` + `/pairing/claim` — the operator never assembles URLs.
-- Preserve machine-readable compatibility: default `pairing-begin`
-  output (JSON on stdout) is byte-compatible; `--qr` adds the terminal QR
-  plus human text on **stderr** (terminal-only, pipe-safe).
-- Output-hygiene rule: the QR art necessarily encodes endpoint +
-  session_id + one-time token, so terminal QR output is SENSITIVE
-  EPHEMERAL OUTPUT — not to be redirected, persisted, or copied
-  unnecessarily. The token MUST NOT *also* be printed as plaintext human
-  guidance and MUST NOT be logged; human stderr text references "el QR"
-  / expiry / intent only. The stdout machine JSON continues to expose the
-  token once, per its documented machine contract. Expiry, single-use
-  atomic consume, and revoke remain the protection against captured QR
-  output.
+- Default `pairing-begin` preserves existing H1 machine-readable JSON stdout
+  unchanged, including the token once; script/pipe compatibility remains.
+- `pairing-begin --qr` is a separate HUMAN QR MODE: terminal QR + instructions,
+  with NO plaintext token JSON emitted on either stream. It is an interactive
+  sensitive terminal mode, not pipe-safe. Human instructions contain no raw
+  token, session secret, E2EE key or FID.
+- The QR contains only canonical v1 bootstrap and is SENSITIVE EPHEMERAL OUTPUT.
+  Discourage redirecting or persisting it. TTL, single-use consume and revoke
+  bound captured-QR risk; do not log the QR or its payload.
 
 ### Dependency decision (inspected, not installed)
 
@@ -57,8 +56,9 @@ populated ad hoc (pip 26.2.1, python 3.11; installed set is
 firebase/google-cloud/requests-centric). P2B-H1 therefore:
 
 1. Creates `requirements.txt` (new file, repo root of personal-admin)
-   as the dependency mechanism, pinning the runtime set already in use
-   plus one addition.
+   only after inspecting direct runtime imports/dependencies. Declare the
+   smallest deliberate runtime dependency set appropriate to this repo; do not
+   snapshot the ad-hoc venv or blindly `pip freeze` transitive/accidental packages.
 2. Adds **`segno`** — pure-Python, actively maintained QR generator
    whose terminal rendering works with **no Pillow/image stack**
    (verify exact `terminal()` API at implementation time). Rationale:
@@ -73,8 +73,8 @@ firebase/google-cloud/requests-centric). P2B-H1 therefore:
 
 ```text
 notification_state.py   EXTEND — --qr flag, endpoint composition,
-                        stderr human block (CLI only)
-requirements.txt        NEW — first declaration file (runtime pins + segno)
+                        human QR mode, suppress machine JSON (CLI only)
+requirements.txt        NEW — first declaration file (deliberate direct dependencies + pinned segno)
 pairing_qr.py           NEW (optional, preferred) — payload composition +
                         rendering helper, kept out of claim path
 ack_server.py           UNTOUCHED
@@ -93,6 +93,8 @@ human instruction plaintext contains no token/session secret (QR art
 itself excluded — it is the intentionally sensitive ephemeral carrier);
 QR payload decodes to the canonical payload
 default machine JSON unchanged (existing test_pairing_claim.py passes)
+--qr emits no plaintext token JSON on either stream
+human instructions contain no E2EE key or FID
 full existing Hermes suite passes
 ```
 
@@ -113,12 +115,24 @@ No device QA for H1 alone.
   repo's existing state-holder conventions) owning SPEC §6 states and
   mapping P2A typed failures → SPEC §7 Spanish copy. Calls the existing
   `PairingProvisioner` off-main; duplicates no P2A logic.
-- Derived readiness + onboarding gate per SPEC §2 (pairingConfigured /
-  fullyReady, 4 derived states, routing rules), including the small
-  new `AckBaseUrlProvider` provisioned-state read API
-  (e.g. `isProvisioned()` — inspected: no such API exists today,
-  `getBaseUrl()` falls back silently, so this is required, not
-  optional).
+- Durable confirmed-pairing state and derived routing per SPEC §2:
+  `hasConfirmedPairing`, `pairingHealthy`, `fullyReady`. First FID observation
+  is not confirmation; successful full provisioning sets confirmation; later
+  FID changes retain prior identity and require re-pair in Ajustes. Temporary
+  registration Waiting never restarts onboarding.
+- Mandatory A1 pre-edit decision gate: inspect P2A durable state ownership and
+  document the exact one-time app-private migration predicate, ordering and
+  idempotency. Existing proven P2A stays recognized; fresh installs never gain
+  false confirmation. Neither observed FID alone nor BuildConfig ACK fallback
+  alone suffices. If evidence is indistinguishable, resolve before editing.
+  No Room/DB migration. Add the small `AckBaseUrlProvider` provisioned-state
+  read API and narrowly extend existing confirmation/state wiring as needed.
+- Post-claim local failures (key import, ACK URL persistence, FID confirmation,
+  invalid local state after 200) require NEW QR. Only proven pre-consumption
+  failures/rate limits permit same QR; ambiguous transport permits one retry,
+  then CONSUMED requires new QR. Replacement requires replacement QR.
+- Tokens: never persisted/logged; discard references after use, clear mutable
+  buffers where applicable; no immutable JVM String zeroization claim.
 - Lift notification-permission state into shared readiness state.
 - Screens: Bienvenido, Notificaciones (with denial/retry per SPEC §3),
   Conectar (Tailscale prerequisite per SPEC §4 + pairing progress +
@@ -136,10 +150,14 @@ feature/pairing/*           NEW — QR model/parser, ViewModel/holder,
                             SPEC §7 error mapping (no scanner yet)
 ui/AcklineApp.kt            EDIT — derived onboarding gate
 SetupState.kt               EDIT — permission in state, redaction prep
-network/AckBaseUrlProvider.kt EDIT — provisioned-state read API only
+network/AckBaseUrlProvider.kt EDIT — provisioned-state read API
+pairing/FidRePairStore.kt + pairing/FidRePairManager.kt
+                            EDIT — durable confirmation + bounded bootstrap
+pairing/PairingProvisioner.kt EDIT if needed — successful-finalization signal
+SetupState.kt / AcklineApplication.kt EDIT as needed — expose confirmation
 ```
 
-Explicitly NOT touched in A1: camera/manifest, `PairingProvisioner`,
+Explicitly NOT touched in A1: camera/manifest,
 `PairingClaimClient`, crypto, Room, ACK/recovery, SetupScreen re-pair
 entry (A2), honor-system deletion (A2).
 
@@ -148,13 +166,18 @@ entry (A2), honor-system deletion (A2).
 ```text
 QR parser: valid v1, wrong version, bad endpoint ×5 rules,
 blank/oversize session/token, unknown-fields-ignored,
-non-JSON rejected, redacted toString asserts
+unrelated/non-JSON → quiet scanner guidance; invalid Ackline-shaped JSON
+  and unsupported version → explicit invalid QR; redacted toString asserts
 error mapping: every P2A failure → correct Spanish class
-  (retry-same / new-QR / replacement / operator / local)
-readiness matrix: pairingConfigured over its 6 signals; fullyReady =
-  pairingConfigured && notificationGranted; denied permission ⇒ never
-  Ready; registration/key/rePair transitions
-  permission denied ⇒ never Ready; registration/key/rePair transitions
+  (retry-same / new-QR including local failures / replacement / operator)
+readiness/routing matrix: first FID remains unconfirmed; full provisioning
+  confirms durably; confirmed FID change routes normal app + re-pair;
+  cold-start Waiting preserves identity; only fullyReady shows Todo listo
+bootstrap: proven P2A recognized, fresh install not confirmed, fallback-only
+  and observation-only insufficient, repeat migration/process restart safe
+permission denial + pairing success: Inbox allowed, incomplete status + CTA,
+  never Listo; explicit retry only, permanent denial → Settings, no counter
+local finalization failures → new QR; ambiguous retry → consumed → new QR
 ViewModel state: rotation-retained transitions incl.
   WaitingForRegistration → ReadyToScan
 regression: ./gradlew clean kspDebugKotlin lintDebug
@@ -172,7 +195,8 @@ Physical UI review may begin after A1 but does not close P2B.
 - CameraX preview + ZXing-core QR-only analyzer as a scanner surface
   (`PreviewView` in `AndroidView`, `ImageAnalysis`, QR decode only,
   single success event per scan session, arbitrary QRs ignored with
-  quiet guidance), wired scanner → parser → ViewModel.
+  quiet guidance; invalid Ackline-shaped payload/future version → explicit
+  invalid-QR error), wired scanner → parser → ViewModel.
 - `CAMERA` permission flow (request, denial with retry, permanent-denial
   guidance; scanner is the one place camera is needed — no fallback
   manual field per owner decision).
@@ -234,12 +258,15 @@ Physical Oppo QA mandatory (see P2B-QA).
 ## P2B-QA — Product Gate (Mandatory)
 
 First install: routes to onboarding; permission grant; permission denial
-(never `Todo listo`, retry works); registration-waiting state;
+(pairing succeeds → Inbox allowed, incomplete status + Ajustes CTA, never
+`Todo listo`; explicit retry, permanent denial → Settings); confirmed cold-start
+registration Waiting keeps Inbox; existing P2A upgrade remains recognized;
 Tailscale-OFF explanation; real terminal QR scan; successful pairing;
 Listo; Inbox.
 
 QR matrix (real sessions): expired → new-QR copy; consumed/replayed →
-new-QR copy; malformed/non-Ackline QR → ignored/guided; fresh-vs-held
+new-QR copy; unrelated QR → quiet scanner guidance; malformed Ackline QR /
+future version → explicit invalid-QR error; post-claim local failures → new QR; fresh-vs-held
 FID → `replace_required` product copy (no CLI syntax on-device);
 `--replace` QR → success.
 

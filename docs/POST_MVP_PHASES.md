@@ -55,15 +55,16 @@ Do not redesign for novelty or add features unrelated to observed friction.
 > **STATUS: CURRENT ACTIVE AREA.** Promoted from future roadmap after the P2
 > preflight. Manual FID copy/paste plus adb E2EE staging is the confirmed
 > setup friction. P2 turns setup into a guided pairing experience:
-> fresh install → notification permission → pair with Hermes → automatic
-> end-to-end verification → "Todo listo" — without adb, shell commands,
-> manual FID file editing, or Firebase/Hermes-path knowledge.
+> fresh install → notification permission → scan QR → pair/provision
+> → readiness → Inbox — without adb, shell commands, manual FID file
+> editing, or Firebase/Hermes-path knowledge. Automated end-to-end
+> self-test is deferred to P2C.
 >
 > P2 direction (from preflight, authoritative unless a later plan revises it):
 >
 > ```text
 > one-time, short-lived pairing session
-> QR primary, short pairing-code fallback, same backend session model
+> JSON v1 QR-only for P2B v1; short code deferred to optional P2B.1
 > pairing claim over existing explicit-VPN Tailnet HTTPS
 > existing Tailscale identity boundary remains required
 > raw E2EE key NEVER in QR / code / logs / UI / clipboard
@@ -94,7 +95,7 @@ Room migration, no UI. Physical proof: real FCM through provisioned FID,
 real E2EE decrypt, Room exactly-once, provisioned ACK URL, Hermes ACK
 sync. Non-blocking finding: native notification display NOT proven
 (`POST_NOTIFICATIONS` denied at delivery time) — P2B onboards permission
-before pairing/verification. Manual adb staging + manual `ackline-fid`
+before pairing/readiness. Manual adb staging + manual `ackline-fid`
 copy are now legacy/debug fallback, not the normal path.
 
 - pairing-session issuance (short TTL, single use, token hashes only,
@@ -109,23 +110,24 @@ copy are now legacy/debug fallback, not the normal path.
   adb staging-file import retained only as debug/recovery fallback;
 - server-confirmed FID baseline / `rePairRequired` clear.
 - QR scanner UI is NOT P2A; it belongs to P2B.
-- See `docs/P2A_QA_RESULTS.md` (evidence). `docs/IMPLEMENTATION_PLAN.md`
-  now holds the active P2B plan.
+- See `docs/P2A_QA_RESULTS.md` (evidence). The normative P2B package is
+  `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`;
+  `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
 ### P2B — Guided onboarding + re-pair (CURRENT ACTIVE)
 
 Expected scope: guided first-run setup (Bienvenido → permission →
-Tailscale prerequisite → pair → verifying → Todo listo), QR/code pairing
-UX on the frozen P2A contract, notification permission before final ready
-state, Tailscale-off explanation, re-pair flow replacing the manual
+Tailscale prerequisite → scan QR → pair/provision → readiness → Inbox),
+QR-only pairing UX on the frozen P2A contract, notification permission
+before final ready state, Tailscale-off explanation, re-pair flow replacing the manual
 "Mark as updated" honor-system action, quiet/minimal diagnostics, no
 secret exposure. Removes the manual FID workflow from normal UX;
 operator-friendly pairing initiation on the Hermes side. No P2C self-test
 beyond placeholder/navigation; no key rotation (P3); no deeper
 diagnostics (P5); no multi-device (P8).
 
-- first-run wizard (Bienvenido → permission → pair → verifying → Todo listo);
-- QR scan primary, short-code entry fallback;
+- first-run wizard (Bienvenido → permission → scan QR → pair/provision → readiness);
+- JSON v1 QR-only in P2B v1; short code is deferred to optional P2B.1;
 - re-pair flow replacing the manual "Mark as updated" honor-system action;
 - no FID / file-path / Firebase jargon in user-facing copy.
 

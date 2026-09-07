@@ -207,16 +207,22 @@ Normal user setup must not require:
 - knowledge of Firebase internals;
 - knowledge of Hermes secret paths.
 
-Desired setup is guided, honest about prerequisites, verifiable
-end-to-end, and recoverable through re-pair:
+Desired setup is guided, honest about prerequisites, and recoverable
+through re-pair. P2B v1 uses this sequence:
 
 ```text
 fresh install
 → grant notification permission
-→ pair with Hermes (scan QR / enter code)
-→ automatic end-to-end verification
-→ "Todo listo"
+→ scan QR
+→ pair/provision
+→ readiness
+→ Inbox
 ```
+
+Missing notification permission never means `Todo listo`; setup remains
+incomplete while Inbox may remain usable with a permission action. P2B is
+guided setup, QR pairing, and re-pair. P2C, which remains planned, adds the
+automated end-to-end self-test and minimal health surface.
 
 Tailscale on the phone remains a user-visible prerequisite for
 pairing, ACK, and recovery — P2 does not promise zero-configuration

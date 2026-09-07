@@ -362,11 +362,11 @@ Mac raw key stays outside repo.
 Android raw staging is already deleted after import.
 
 > **P2A IMPLEMENTED:** adb staging remains supported ONLY as a
-> legacy/debug fallback. The implemented normal path is P2A guided
-> pairing: Hermes releases the existing key once inside an authorized
-> pairing-claim response over tailnet TLS, and the phone imports directly
-> to Keystore. The raw key NEVER crosses QR / code / logs / UI /
-> clipboard. P2B builds the product UX on this implemented protocol.
+> legacy/debug fallback. The implemented provisioning path is an
+> authorized pairing claim: Hermes releases the existing key once inside
+> the claim response over tailnet TLS, and the phone imports directly to
+> Keystore. The raw key NEVER crosses the QR carrier, logs, UI, or
+> clipboard. P2B adds the operator/scanner UX on this implemented protocol.
 
 No key rotation in P2 — rotation/history/recovery policy is P3
 (see `docs/POST_MVP_PHASES.md`). P2 only provisions the existing current
@@ -814,7 +814,8 @@ configured but post-reboot auto-start has not been physically verified yet.
 > This section documents the implemented P2A boundary (Hermes H1 +
 > Ackline A1, physically integrated — see `docs/P2A_QA_RESULTS.md`). P2B
 > builds the product UX on this frozen contract; P2C remains planned.
-> Active build plan: `docs/IMPLEMENTATION_PLAN.md` (P2B).
+> Normative P2B package: `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and
+> `docs/P2B_TASKS.md`; `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
 ### 18.1 Implemented pairing flow (P2A)
 
@@ -822,21 +823,23 @@ configured but post-reboot auto-start has not been physically verified yet.
 Mac issues short-lived, single-use pairing session (fresh | replace)
         │
         ▼
-QR (endpoint + one-time token) or short code — NEVER key material
+Bootstrap values are supplied to PairingClaimClient
         │
         ▼
-Phone claims: POST /pairing/claim { fid, token } over explicit-VPN
-Tailnet HTTPS, with the existing Tailscale-User-Login boundary
+POST /pairing/claim { fid, token } over explicit-VPN Tailnet HTTPS,
+with the existing Tailscale-User-Login boundary
         │
         ▼
-Hermes validates (constant-time, atomic consume-first, TTL),
-writes its own ackline-fid (replace intent required to overwrite),
-and releases the existing E2EE key ONCE in the no-store response
+Hermes validates (constant-time, atomic consume-first, TTL), updates
+its own ackline-fid (replace intent required to overwrite), and returns
+the current E2EE key plus ACK URL in the no-store response
         │
         ▼
-Phone imports directly to Keystore, baselines FID on server
-confirmation, then runs the P2C end-to-end self-test
+Phone imports the key, stores the ACK URL, and confirms pairing
 ```
+
+P2B adds the QR operator/scanner UX on this P2A boundary. P2C later adds
+the end-to-end self-test.
 
 ### 18.2 What stays unchanged
 
@@ -859,8 +862,10 @@ confirmation, then runs the P2C end-to-end self-test
   endpoint.
 - adb staging + manual FID copy + honor-system "Mark as updated" are now
   legacy/debug fallback (honor-system removal is a P2B task).
-- Setup gains a server-confirmed paired state; `rePairRequired` clears
-  on claim success, not on self-attestation.
+- P2A established the server-confirmed FID baseline as historical protocol
+  behavior. P2B-A1 adds durable `serverPairingConfirmed`; observing an FID
+  alone is not pairing confirmation, and readiness must not use it as a
+  substitute.
 - Raw key never crosses QR; raw key never persists in the pairing DB;
   Ackline stores the key only in AndroidKeyStore and the provisioned ACK
   URL in app-private runtime config; ACK/recovery resolve the runtime URL

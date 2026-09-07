@@ -13,9 +13,9 @@
 
 Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
-Ackline branch: `dev` — HEAD `b122aa3 feat(ui): finalize Phase 9 product polish`
+Ackline branch: `p2b-planning` — HEAD `39cfa5e8a9b09a49ab5ba3e5069c90424fde1f43` (`docs: address P2B planning review findings`)
 
-Hermes Personal Admin branch: `dev` — HEAD `fab085d7400499353c638f93d62aa4661330aa18`
+Hermes Personal Admin branch: `dev` — HEAD `b95129f71f110854910b23d165faf311a5ce8786` (`feat: add secure Ackline pairing claim protocol`)
 
 Phase 7 blockers: **0**
 
@@ -38,7 +38,8 @@ Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout 
 Current change: **P2A implementation COMPLETE; P2A docs closeout recorded by this change.**
 
 Next actual step: **P2B — Guided Pairing / Onboarding / Re-pair UX**
-(see `docs/IMPLEMENTATION_PLAN.md`). P2A backend/protocol and Android
+(see `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`;
+`docs/IMPLEMENTATION_PLAN.md` is the concise active-plan index). P2A backend/protocol and Android
 provisioning foundation are now implemented and physically integrated
 (Hermes H1 + Ackline A1, `docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS).
 P2B is now the active product-facing slice. P2C (self-test + minimal
@@ -54,11 +55,11 @@ The `ack_server.py` lifecycle/supervision operational follow-up is resolved
 ## Post-MVP P2 — Current Active Area
 
 P2 turns setup into a guided pairing experience: fresh install →
-notification permission → pair with Hermes → automatic end-to-end
-verification → "Todo listo" — without adb, shell commands, manual FID
-file editing, or Firebase/Hermes-path knowledge. Full direction in
-`docs/POST_MVP_PHASES.md`; active build plan in
-`docs/IMPLEMENTATION_PLAN.md`.
+notification permission → scan QR → pair/provision → readiness → Inbox —
+without adb, shell commands, manual FID file editing, or
+Firebase/Hermes-path knowledge. Normative detail is in
+`docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`; broader
+roadmap context is in `docs/POST_MVP_PHASES.md`.
 
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented + physically integrated (PASS_WITH_FINDINGS)
@@ -474,11 +475,12 @@ q120 cadence preserved
 ### Repository distinction (do not conflate)
 
 ```text
-Hermes Agent scheduler/runtime HEAD 96ed0e71ea  ← DIFFERENT repository
-Hermes Personal Admin checkout fab085d7400...   ← this project's dev
+Hermes Agent scheduler/runtime HEAD: not verified here  ← DIFFERENT repository
+Hermes Personal Admin checkout b95129f71f...             ← this project's dev
 ```
 
-Do **not** claim that `fab085d` must exist in hermes-agent history.
+Do **not** claim that the Personal Admin SHA must exist in hermes-agent
+history.
 
 ---
 
@@ -609,11 +611,12 @@ code, scheduler configuration, or databases.
 ## Next Step
 
 1. Implement **P2B — Guided Pairing / Onboarding / Re-pair UX** per
-   `docs/IMPLEMENTATION_PLAN.md`. P2A (Hermes H1 + Ackline A1) is complete
+   `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`.
+   P2A (Hermes H1 + Ackline A1) is complete
    and physically integrated (`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS;
    native notification display NOT PROVEN in that run because
    `POST_NOTIFICATIONS` was denied at delivery time — P2B places permission
-   onboarding before pairing/verification).
+   onboarding before pairing/readiness).
 2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
    executed after the selected post-MVP setup work (P2) is complete and
    Ackline can be used normally; Ackline/FCM is the sole transport under

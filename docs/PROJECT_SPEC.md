@@ -198,6 +198,33 @@ MVP setup may expose:
 
 Do not turn setup into an operations dashboard.
 
+### 9.4 Guided Pairing (Post-MVP P2 — intended direction)
+
+Normal user setup must not require:
+
+- adb or shell commands;
+- manual FID file editing;
+- knowledge of Firebase internals;
+- knowledge of Hermes secret paths.
+
+Desired setup is guided, honest about prerequisites, verifiable
+end-to-end, and recoverable through re-pair:
+
+```text
+fresh install
+→ grant notification permission
+→ pair with Hermes (scan QR / enter code)
+→ automatic end-to-end verification
+→ "Todo listo"
+```
+
+Tailscale on the phone remains a user-visible prerequisite for
+pairing, ACK, and recovery — P2 does not promise zero-configuration
+setup. The product stays intentionally single-user / single-device;
+re-pairing an existing installation requires explicit replace intent.
+Manual FID copy and adb key staging remain the working procedures until
+P2 ships, then become debug/recovery fallback.
+
 ## 10. UX Direction
 
 Visual direction is inspired by lightweight personal inbox/reminder apps and user-supplied references.

@@ -16,6 +16,11 @@ If daily use does not reveal a problem, do not create a feature to solve it.
 
 ## P1 — UX Refinement From Real Usage
 
+> **STATUS: NOT ACTIVE.** Phase 9 already delivered the initial deliberate
+> product polish (accepted on the physical Oppo). P1 now means only
+> evidence-driven refinement from actual future daily use. Do not reopen
+> visual redesign without observed friction.
+
 ### Trigger
 
 Repeated friction or screenshot feedback identifies a specific daily-use problem after MVP.
@@ -45,26 +50,79 @@ Do not redesign for novelty or add features unrelated to observed friction.
 
 ---
 
-## P2 — Better Pairing / Device Registration
+## P2 — Better Pairing / Guided Setup
 
-### Trigger
+> **STATUS: CURRENT ACTIVE AREA.** Promoted from future roadmap after the P2
+> preflight. Manual FID copy/paste plus adb E2EE staging is the confirmed
+> setup friction. P2 turns setup into a guided pairing experience:
+> fresh install → notification permission → pair with Hermes → automatic
+> end-to-end verification → "Todo listo" — without adb, shell commands,
+> manual FID file editing, or Firebase/Hermes-path knowledge.
+>
+> P2 direction (from preflight, authoritative unless a later plan revises it):
+>
+> ```text
+> one-time, short-lived pairing session
+> QR primary, short pairing-code fallback, same backend session model
+> pairing claim over existing explicit-VPN Tailnet HTTPS
+> existing Tailscale identity boundary remains required
+> raw E2EE key NEVER in QR / code / logs / UI / clipboard
+> Hermes releases the existing E2EE key once, in the claim response,
+>   over authenticated HTTPS; the phone imports directly to Keystore
+> Hermes updates its own single-device ackline-fid ONLY after an
+>   authorized pairing claim — this is NOT a standing
+>   automatic-registration endpoint
+> explicit replace intent required to overwrite an existing FID
+> no accounts, no general device registry, single-device semantics remain
+> no custom cryptography, no Room migration expected
+> ```
+>
+> Tailscale on the phone remains a user-visible prerequisite for
+> pairing/ACK/recovery. P2 does not promise zero-configuration setup.
 
-Manual FID copy/paste becomes annoying, fragile, or frequent.
+### P2A — Pairing backend/protocol (NEXT ACTIVE IMPLEMENTATION UNIT)
 
-### Possible Work
+- pairing-session issuance (short TTL, single use, token hashes only,
+  constant-time comparison, atomic consume);
+- explicit fresh vs replace intent;
+- pairing claim endpoint reusing the Tailscale identity boundary;
+- authorized `ackline-fid` write on valid claim;
+- one-time E2EE key release in the claim response (`no-store`, sanitized
+  typed errors, rate limiting, revoke support);
+- Ackline `PairingClaimClient` reusing `TailnetHttpsConnectionFactory`;
+- direct raw-key import into the existing `PayloadKeyStore`;
+  adb staging-file import retained only as debug/recovery fallback;
+- server-confirmed FID baseline / `rePairRequired` clear.
+- QR scanner UI is NOT P2A; it belongs to P2B.
+- See `docs/IMPLEMENTATION_PLAN.md` (P2A is the active plan).
 
-- QR pairing;
-- one-time pairing secret;
-- device replacement flow;
-- registration health indicator.
+### P2B — Guided onboarding + re-pair (PLANNED, not active)
+
+- first-run wizard (Bienvenido → permission → pair → verifying → Todo listo);
+- QR scan primary, short-code entry fallback;
+- re-pair flow replacing the manual "Mark as updated" honor-system action;
+- no FID / file-path / Firebase jargon in user-facing copy.
+
+### P2C — Self-test + minimal setup health (PLANNED, not active)
+
+- phone-initiated end-to-end self-test (Hermes → FCM → decrypt → persist →
+  ACK → Hermes) using the production E2EE protocol;
+- quiet minimal health surface only (see P5 note below).
 
 ### Recommended AI Route
 
-ChatGPT architecture → `/local-quality` → Gemini for Android/Firebase platform behavior.
+```text
+P2A: strongest-reasoning architecture/threat model → appropriate code agent
+     → independent security review required
+P2B: Android/Compose implementation + physical Oppo QA
+P2C: cross-system correctness review
+```
 
 ### Do Not Do
 
-No accounts or general device-management backend.
+No accounts, no general device-management backend, no multi-device
+registry (P8 remains out of scope), no custom crypto protocol,
+no standing unauthenticated registration endpoint.
 
 ---
 
@@ -78,8 +136,13 @@ Long-term use, reinstall, or device replacement makes key lifecycle management n
 
 - key rotation;
 - small key-version history;
-- safe re-pairing;
-- device-loss/reinstall procedure.
+- long-term key recovery policy;
+- device-loss procedure beyond fresh pairing.
+
+> **P2 vs P3 boundary:** P2 provisions the *existing current* key to a
+> (re)installed device through a fresh pairing session. That reinstall
+> re-provisioning is NOT key rotation. Rotation, version history, and
+> recovery policy remain P3.
 
 ### Recommended AI Route
 
@@ -125,6 +188,13 @@ Real-world debugging shows that a small diagnostics surface would materially red
 - last ACK sync;
 - last reconciliation;
 - app/build version.
+
+> **PARTIALLY PROMOTED INTO P2C.** The P2 preflight promotes exactly this
+> subset into P2C as a quiet minimal health surface for setup/support:
+> last encrypted push received, pending ACK count, last successful ACK
+> sync, last reconciliation, app/build version. P2C exposes nothing more.
+> P5 remains available for future *deeper* diagnostics only if real-world
+> maintenance justifies it.
 
 ### Do Not Do
 
@@ -179,6 +249,9 @@ A second personal device genuinely needs independent push/ACK behavior.
 
 Do not prematurely add this complexity.
 
+> **P2 boundary:** P8 multi-device remains explicitly OUT OF SCOPE for P2.
+> P2 keeps single-device, last-writer-wins FID semantics.
+
 ---
 
 ## P9 — Alternative Push Transport
@@ -190,3 +263,6 @@ Only if FCM becomes unsuitable because of platform, cost, privacy, device ecosys
 The core app must remain transport-isolated so this is a bounded migration.
 
 Do not maintain two push transports proactively.
+
+> **CURRENT:** FCM remains the production transport. ntfy is
+> legacy/disabled and is not an approved fallback or rollback path.

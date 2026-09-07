@@ -252,6 +252,9 @@ Do not accept CRUD-quality UI.
 | 7 — Reconciliation | E/F | ChatGPT → `/local-quality` → Hy3/DS → Gemini background behavior → ChatGPT |
 | 8 — Real-World Replacement Gate | F/I | ChatGPT test analysis → Gemini if platform issue → targeted route by defect → Sol Codex only if high-risk → ChatGPT |
 | 9 — MVP UX Polish | D | ChatGPT screenshots → `/local-quality` → Luna if needed → local review → ChatGPT screenshots/GitHub |
+| P2A — Pairing backend/protocol | E/I | Strongest-reasoning architecture/threat model → appropriate code agent → **independent security review required** → ChatGPT GitHub |
+| P2B — Guided onboarding + re-pair | D/F | ChatGPT UX plan → Android/Compose implementation → physical Oppo QA → screenshot review → ChatGPT GitHub |
+| P2C — Self-test + minimal health | E | Cross-system correctness review (Ackline + Hermes) → physical Oppo QA → ChatGPT GitHub |
 
 ---
 

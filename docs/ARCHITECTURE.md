@@ -361,7 +361,16 @@ Mac raw key stays outside repo.
 
 Android raw staging is already deleted after import.
 
-No key rotation in this phase.
+> **P2 NOTE (intended, not implemented):** adb staging remains supported
+> as an operational/debug fallback, but guided pairing becomes the
+> intended user setup path once P2 ships: Hermes releases the existing
+> key once inside an authorized pairing-claim response over tailnet TLS,
+> and the phone imports directly to Keystore. The raw key NEVER crosses
+> QR / code / logs / UI / clipboard.
+
+No key rotation in P2 — rotation/history/recovery policy is P3
+(see `docs/POST_MVP_PHASES.md`). P2 only provisions the existing current
+key; reinstall re-provisioning via fresh pairing is not rotation.
 
 ---
 
@@ -396,17 +405,30 @@ Properties:
 - not routinely logged in full.
 
 Hermes uses `~/.hermes/secrets/ackline-fid` as its one durable local
-configuration source. Hermes never writes the file; the operator
-provisions it manually.
+configuration source. Single-device, last-writer-wins semantics remain;
+there is no multi-device registry (P8 stays out of scope).
 
-Phase 7 (implemented): Ackline persists the last observed FID, detects
-FID registration/change, sets `rePairRequired`, enqueues event-driven
-recovery, and surfaces an actionable re-pair warning in Setup.
-`rePairRequired` survives process restart and clears only through an
-explicit Setup action ("Mark as updated") after the operator updates
+Phase 7 (implemented, current behavior): Hermes never writes the file;
+the operator provisions it manually by copying the current FID.
+Ackline persists the last observed FID, detects FID registration/change,
+sets `rePairRequired`, enqueues event-driven recovery, and surfaces an
+actionable re-pair warning in Setup. `rePairRequired` survives process
+restart and clears only through an explicit Setup action
+("Mark as updated") after the operator updates
 `~/.hermes/secrets/ackline-fid` with the current FID.
 
-No automatic provisioning and no server-side FID registry.
+> **SUPERSEDED FOR P2 (intended, not implemented):** "Hermes never
+> writes `ackline-fid`", "no automatic provisioning under any
+> circumstance", and "manual FID copy is permanent" are superseded as
+> architecture. New intended boundary (see §18): Hermes may update its
+> own single-device FID configuration ONLY through an explicit
+> short-lived pairing session authorized by Tailscale identity plus a
+> one-time secret, with explicit replace intent when overwriting an
+> existing FID. This is NOT a standing automatic-registration endpoint:
+> token-less auto-registration is rejected (any tailnet identity could
+> silently repoint delivery and request the E2EE key). Manual FID copy
+> remains the operational procedure until P2 ships, then becomes
+> debug/recovery fallback.
 
 ---
 
@@ -782,3 +804,56 @@ LaunchDaemon (`ai.hermes.personal-admin-ack`). Runs as user `eduardo` (not
 root), binds `127.0.0.1:2587`, external exposure through Tailscale Serve
 `:8443`. Controlled SIGTERM confirmed auto-restart in ~2s. RunAtLoad is
 configured but post-reboot auto-start has not been physically verified yet.
+
+---
+
+## 18. Post-MVP P2 Pairing/Provisioning Boundary (INTENDED — NOT IMPLEMENTED)
+
+> Nothing in this section is implemented. It records the authorized P2
+design direction so Phase 7 constraints are not misread as permanent.
+> Active build plan: `docs/IMPLEMENTATION_PLAN.md` (P2A).
+
+### 18.1 Intended pairing flow
+
+```text
+Mac issues short-lived, single-use pairing session (fresh | replace)
+        │
+        ▼
+QR (endpoint + one-time token) or short code — NEVER key material
+        │
+        ▼
+Phone claims: POST /pairing/claim { fid, token } over explicit-VPN
+Tailnet HTTPS, with the existing Tailscale-User-Login boundary
+        │
+        ▼
+Hermes validates (constant-time, atomic consume-first, TTL),
+writes its own ackline-fid (replace intent required to overwrite),
+and releases the existing E2EE key ONCE in the no-store response
+        │
+        ▼
+Phone imports directly to Keystore, baselines FID on server
+confirmation, then runs the P2C end-to-end self-test
+```
+
+### 18.2 What stays unchanged
+
+- FCM is transport only; transport isolation holds.
+- Single user, single Android device; no accounts, no analytics,
+  no foreground push service, no multi-device architecture.
+- E2EE fail-closed: unknown-key / tampered payloads still rejected,
+  same frozen envelope (`v = 1`, `kid = ackline-main`, AES-256-GCM).
+- Room remains local alert truth; explicit `Visto` semantics unchanged;
+  ACK remains eventual-sync over tailnet HTTPS.
+- Recovery/reconciliation architecture unchanged.
+- Tailscale dependency for ACK/recovery/pairing remains allowed and
+  user-visible; FCM reception never depends on it.
+- No Room migration; no Hermes notifications-schema migration.
+
+### 18.3 What P2 deliberately revises
+
+- Hermes gains exactly one authorized write path for `ackline-fid`:
+  valid pairing claim only. No standing registration endpoint.
+- adb staging + manual FID copy + honor-system "Mark as updated"
+  move from primary procedure to debug/recovery fallback.
+- Setup gains a server-confirmed paired state; `rePairRequired` clears
+  on claim success, not on self-attestation.

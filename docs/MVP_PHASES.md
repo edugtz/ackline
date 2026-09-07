@@ -661,11 +661,19 @@ feat: add Hermes redelivery and event-driven recovery
 
 ## Phase 8 — Real-World Replacement Gate
 
-> **STATUS: DEFERRED.** Phase 8 is deferred until the MVP product
-> experience is ready for genuine daily use. The already-completed Phase 7
-> baseline (Change G final integration QA) is readiness evidence but does
-> not count as executing or passing Phase 8. Phase 9 is the current /
-> next active phase.
+> **STATUS: DEFERRED — FINAL REAL-WORLD GATE (not PASS).** Phase 8 is
+> intentionally postponed until Ackline has completed the selected
+> post-MVP setup/usability work (P2) and can be used normally. The
+> already-completed Phase 7 baseline (Change G final integration QA) is
+> readiness evidence but does not count as executing or passing Phase 8.
+> Phase 9 product polish is complete.
+>
+> **CURRENT NOTE (post-MVP rebase):** ntfy is legacy/disabled and is not
+> an approved rollback/fallback. The gate evaluates Ackline + FCM
+> readiness for sustained daily use: no normal-use scenario may require
+> manually opening the app to restore push; no ACKs lost; duplicates
+> harmless; offline recovery and reconciliation work. Historical
+> ntfy-retirement language above is retained as context, not rewritten.
 
 ### Objective
 
@@ -758,9 +766,9 @@ test: complete Hermes notification replacement gate
 
 ## Phase 9 — MVP UX / Product Polish
 
-> **STATUS: CURRENT / NEXT ACTIVE PHASE.** Phase 8 is deferred until the
-> MVP product experience is ready for genuine daily use. Phase 9 is the
-> next implementation phase.
+> **STATUS: COMPLETE — PRODUCT UX ACCEPTED ON PHYSICAL OPPO.**
+> (`dev` `b122aa3 feat(ui): finalize Phase 9 product polish`.)
+> Phase 8 remains the deferred final real-world gate.
 
 ### Objective
 

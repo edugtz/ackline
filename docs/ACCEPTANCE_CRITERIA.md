@@ -204,3 +204,20 @@ multi-day Oppo real-use PASS
 product/UX acceptance PASS
 final GitHub review PASS
 ```
+
+## 11. Pairing Acceptance (Post-MVP P2 — applies once P2 ships)
+
+- No raw E2EE key in QR / code / logs / clipboard / UI / source control.
+- Pairing session expires (short TTL); expired claims fail closed.
+- Single-use enforcement: concurrent or replayed claims yield exactly one
+  success; replays are rejected.
+- Overwriting an existing working FID requires explicit replace intent;
+  failed pairing never overwrites a working FID.
+- The phone clears `rePairRequired` only on server-confirmed claim
+  success, never on self-attestation.
+- A fresh install reaches a usable encrypted state without adb or manual
+  FID editing.
+- Pairing failures explain the failing link in plain language without
+  exposing identifiers, paths, tokens, or protocol internals.
+
+These add to — and never weaken — the security/reliability criteria above.

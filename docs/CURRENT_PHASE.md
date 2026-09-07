@@ -2,13 +2,16 @@
 
 ## Status
 
+**MVP IMPLEMENTATION: COMPLETE**
 **PHASE 7 COMPLETE — FINAL QA PASS**
-**PHASE 8 DEFERRED — MULTI-DAY REAL-WORLD GATE PENDING**
-**PHASE 9 — CURRENT / NEXT ACTIVE PHASE**
+**PHASE 9 COMPLETE — PRODUCT UX ACCEPTED ON PHYSICAL OPPO**
+**PHASE 8 DEFERRED — FINAL REAL-WORLD USAGE / RELIABILITY GATE (not PASS)**
+**POST-MVP P2 — CURRENT ACTIVE AREA (Better Pairing / Guided Setup)**
+**P2A — NEXT ACTIVE IMPLEMENTATION SLICE (pairing backend/protocol)**
 
-Phase: `9 — MVP UX / Product Polish`
+Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
-Ackline branch: `dev` — HEAD `414d3471561f89dc78050e2638b07aaf17238fc5`
+Ackline branch: `dev` — HEAD `b122aa3 feat(ui): finalize Phase 9 product polish`
 
 Hermes Personal Admin branch: `dev` — HEAD `fab085d7400499353c638f93d62aa4661330aa18`
 
@@ -30,14 +33,38 @@ Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICA
 Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout recorded by this documentation change
 ```
 
-Current change: **none — Phase 7 runtime work is complete.**
+Current change: **none — P2A implementation not yet started.**
 
-Next actual step: **Phase 9 — MVP UX / Product Polish**.
+Next actual step: **P2A — pairing backend/protocol**
+(see `docs/IMPLEMENTATION_PLAN.md`). P2B (guided onboarding + re-pair UX)
+and P2C (self-test + minimal health) are planned, not active.
 
-Phase 8 — multi-day real-world Oppo replacement gate — is **DEFERRED**
-until the MVP product experience is ready for genuine daily use (see
-Phase 8 section below). The `ack_server.py` lifecycle/supervision
-operational follow-up is resolved (see Operational Follow-Up below).
+Phase 8 — multi-day real-world Oppo usage/reliability gate — is
+**DEFERRED** until Ackline has completed the selected post-MVP
+setup/usability work (P2) and can be used normally. The deferral is
+intentional sequencing, not a failure signal. Phase 8 is NOT marked PASS.
+The `ack_server.py` lifecycle/supervision operational follow-up is resolved
+(see Operational Follow-Up below).
+
+## Post-MVP P2 — Current Active Area
+
+P2 turns setup into a guided pairing experience: fresh install →
+notification permission → pair with Hermes → automatic end-to-end
+verification → "Todo listo" — without adb, shell commands, manual FID
+file editing, or Firebase/Hermes-path knowledge. Full direction in
+`docs/POST_MVP_PHASES.md`; active build plan in
+`docs/IMPLEMENTATION_PLAN.md`.
+
+```text
+P2A  pairing backend/protocol     NEXT — authorized to implement
+P2B  guided onboarding + re-pair  PLANNED — not active (owns QR scanner UI)
+P2C  self-test + minimal health   PLANNED — not active
+```
+
+Legacy setup procedures (adb E2EE staging, manual FID copy into
+`~/.hermes/secrets/ackline-fid`, honor-system "Mark as updated") remain
+operational today and become debug/recovery fallback once P2 ships. They
+are NOT removed by this documentation change.
 
 ---
 
@@ -575,10 +602,11 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Begin **Phase 9 — MVP UX / Product Polish** (see Phase 9 section in
-   `docs/MVP_PHASES.md`).
-2. Phase 8 — multi-day real-world Oppo replacement gate — will be
-   executed after the MVP product experience is ready for genuine daily
-   use; Ackline/FCM is the sole transport under test — no ntfy fallback.
+1. Implement **P2A — pairing backend/protocol** per
+   `docs/IMPLEMENTATION_PLAN.md` (Phase 9 product polish is complete).
+2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
+   executed after the selected post-MVP setup work (P2) is complete and
+   Ackline can be used normally; Ackline/FCM is the sole transport under
+   test — no ntfy fallback.
 3. `ack_server.py` lifecycle/supervision is resolved (see Operational
    Follow-Up above).

@@ -142,6 +142,31 @@ No device QA for H1 alone.
   permanent manual-token field in release UI, never near secret paths.
   (Implements the owner constraint: no fake "enter 43-char token" UX.)
 
+### A1 bootstrap decision — approved compatibility exception
+
+P2A local durable state is intrinsically ambiguous: key/URL writes precede FID
+confirmation, which previously left no distinct marker. The owner authorizes
+this bounded exception solely for the externally physically validated pre-P2B
+installation. It is never general proof or future pairing inference.
+
+At startup capture the stored FID/re-pair baseline before registration observes
+a new FID. Defer durable FID observation until the decision is committed, so
+process death while keys load cannot erase a mismatch. PackageInfo `firstInstallTime > 0 && firstInstallTime < lastUpdateTime`
+is the upgrade signal (metadata lookup failure is ineligible). For an upgrade,
+wait for startup key/runtime-URL reads and registration success or failure;
+loading is not a negative decision. Confirm only if no prior confirmation,
+provisioned runtime URL (not fallback), production key ready, stored and current
+nonblank FIDs equal, and baseline re-pair is false. A fresh install is immediately
+ineligible. Existing confirmation is retained.
+
+Persist `serverPairingConfirmed` and `legacyP2aBootstrapEvaluated` together with
+one SharedPreferences commit; no Room migration. Stop evaluating after the
+commit. Failed persistence leaves the UI claim gate closed. Registration failure
+is a resolved unavailable FID, so it cannot confirm. New pairing is blocked until
+the migration is durable. Normal `confirmServerPairing` atomically records the
+current FID, clears re-pair, confirms, and closes the migration; no earlier step
+confirms. FID observation retains confirmation history. Tokens are never stored.
+
 ### Files (Ackline, single `app` module)
 
 ```text

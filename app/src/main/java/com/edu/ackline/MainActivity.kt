@@ -16,7 +16,10 @@ class MainActivity : ComponentActivity() {
         // receives the Device ID through AcklineMessagingService.onRegistered().
         FirebaseMessaging.getInstance()
             .register()
-            .addOnFailureListener { SetupState.onRegistrationError(it) }
+            .addOnFailureListener {
+                SetupState.onRegistrationError(it)
+                (application as AcklineApplication).fidRePairManager.onRegistrationFailed()
+            }
 
         setContent {
             AcklineTheme {

@@ -1,13 +1,8 @@
 package com.edu.ackline.feature.setup
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -40,7 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
+import com.edu.ackline.feature.onboarding.rememberNotificationPermissionAction
 import com.edu.ackline.AcklineApplication
 import com.edu.ackline.RegistrationState
 import com.edu.ackline.SetupState
@@ -60,15 +55,9 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
     val setupState by SetupState.state.collectAsState()
     val context = LocalContext.current
 
-    var notificationGranted by remember {
-        mutableStateOf(hasNotificationPermission(context))
-    }
+    val notificationGranted = setupState.notificationGranted
+    val permission = rememberNotificationPermissionAction()
     var rePairUpdateErrorMessage by remember { mutableStateOf<String?>(null) }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        notificationGranted = granted
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -85,11 +74,7 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
             // ── Status summary — honest aggregate of the rows below only.
             val registrationReady =
                 setupState.registrationState == RegistrationState.Ready
-            val allReady = notificationGranted &&
-                registrationReady &&
-                setupState.installationId != null &&
-                setupState.encryptionReady &&
-                !setupState.rePairRequired
+            val allReady = setupState.fullyReady
 
             SetupSection(title = "Estado") {
                 Text(
@@ -128,13 +113,11 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                     value = if (notificationGranted) "Permitido" else "No permitido",
                     ok = notificationGranted,
                 )
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
+                if (!notificationGranted) {
                     Button(
-                        onClick = {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        },
+                        onClick = permission.launch,
                     ) {
-                        Text("Solicitar permiso")
+                        Text(permission.label)
                     }
                 }
                 StatusRow(
@@ -304,14 +287,6 @@ private fun StatusRow(
             },
         )
     }
-}
-
-private fun hasNotificationPermission(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-    return ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.POST_NOTIFICATIONS,
-    ) == PackageManager.PERMISSION_GRANTED
 }
 
 private fun copyDeviceId(context: Context, deviceId: String) {

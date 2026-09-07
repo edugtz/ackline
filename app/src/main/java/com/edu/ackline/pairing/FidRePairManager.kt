@@ -8,13 +8,22 @@ internal class FidRePairManager(
     private val publishUpdatedState: (FidRePairState) -> Unit,
     private val publishRegistration: (String) -> Unit,
     private val diagnosticLogger: (String) -> Unit,
+    private val packageUpgrade: Boolean? = null,
 ) {
 
     private val lock = Any()
 
+    private var bootstrap: LegacyP2aBootstrap? = null
+    private var pendingObservation: String? = null
+
     fun restore() = synchronized(lock) {
         try {
-            publishRestoredState(store.read())
+            val state = store.read()
+            if (packageUpgrade != null && bootstrap == null) {
+                bootstrap = LegacyP2aBootstrap(state, packageUpgrade)
+            }
+            publishRestoredState(state)
+            finishBootstrapIfResolved()
         } catch (_: Exception) {
             log("FID pairing state restore failed")
         }
@@ -28,8 +37,14 @@ internal class FidRePairManager(
 
         synchronized(lock) {
             try {
-                val observedState = store.observe(installationId)
-                publishObservedState(observedState)
+                if (bootstrap != null) {
+                    // Preserve the old durable baseline across process death while keys load.
+                    pendingObservation = installationId
+                    bootstrap?.registrationResolved(installationId)
+                    finishBootstrapIfResolved()
+                } else {
+                    publishObservedState(store.observe(installationId))
+                }
                 publishRegistration(installationId)
             } catch (_: Exception) {
                 log("FID pairing state update failed")
@@ -40,6 +55,30 @@ internal class FidRePairManager(
                     log("recovery scheduling failed")
                 }
             }
+        }
+    }
+
+    fun onStartupProvisioningResolved(encryptionReady: Boolean, ackProvisioned: Boolean) = synchronized(lock) {
+        bootstrap?.provisioningResolved(encryptionReady, ackProvisioned)
+        finishBootstrapIfResolved()
+    }
+
+    fun onRegistrationFailed() = synchronized(lock) {
+        bootstrap?.registrationResolved(null)
+        finishBootstrapIfResolved()
+    }
+
+    private fun finishBootstrapIfResolved() {
+        val eligible = bootstrap?.decision() ?: return
+        try {
+            val decided = store.evaluateLegacyBootstrap(eligible)
+            val observed = pendingObservation?.let(store::observe) ?: decided
+            publishUpdatedState(observed)
+            pendingObservation = null
+            bootstrap = null
+        } catch (_: Exception) {
+            // No onboarding claim is allowed until the durable decision is saved.
+            log("Pairing migration persistence failed")
         }
     }
 

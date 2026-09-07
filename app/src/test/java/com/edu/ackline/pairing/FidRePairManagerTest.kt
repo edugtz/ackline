@@ -159,8 +159,8 @@ class FidRePairManagerTest {
 
         assertTrue(harness.manager.markServerPairingConfirmed("current"))
 
-        assertEquals(FidRePairState("current", false), storage.state)
-        assertEquals(FidRePairState("current", false), harness.updatedStates.single())
+        assertEquals(FidRePairState("current", false, true, true), storage.state)
+        assertEquals(FidRePairState("current", false, true, true), harness.updatedStates.single())
     }
 
     @Test
@@ -170,7 +170,7 @@ class FidRePairManagerTest {
         assertTrue(harness.manager.markServerPairingConfirmed("A"))
         harness.manager.onRegistered("B")
 
-        assertEquals(FidRePairState("B", true), harness.observedStates.single())
+        assertEquals(FidRePairState("B", true, true, true), harness.observedStates.single())
     }
 
     @Test

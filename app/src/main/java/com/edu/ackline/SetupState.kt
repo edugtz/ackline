@@ -14,7 +14,19 @@ data class SetupUiState(
     val lastMessageSummary: String? = null,
     val encryptionReady: Boolean = false,
     val rePairRequired: Boolean = false,
-)
+    val hasConfirmedPairing: Boolean = false,
+    val legacyBootstrapResolved: Boolean = false,
+    val ackProvisioned: Boolean = false,
+    val notificationGranted: Boolean = false,
+) {
+    val pairingHealthy: Boolean
+        get() = hasConfirmedPairing && encryptionReady && ackProvisioned && !rePairRequired
+    val fullyReady: Boolean
+        get() = pairingHealthy && registrationState == RegistrationState.Ready &&
+            installationId != null && notificationGranted
+    val needsOnboarding: Boolean get() = !hasConfirmedPairing
+    override fun toString(): String = "SetupUiState(<redacted>)"
+}
 
 /**
  * Minimal app-process state holder for the Phase 0 setup surface.
@@ -30,6 +42,14 @@ object SetupState {
 
     private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
+
+    fun onNotificationPermissionChanged(granted: Boolean) {
+        _state.update { it.copy(notificationGranted = granted) }
+    }
+
+    fun onAckProvisioningChanged(provisioned: Boolean) {
+        _state.update { it.copy(ackProvisioned = provisioned) }
+    }
 
     fun onRegistered(installationId: String) {
         _state.update {
@@ -73,4 +93,6 @@ internal fun SetupUiState.withPairingState(pairingState: FidRePairState): SetupU
     copy(
         installationId = pairingState.lastObservedFid ?: installationId,
         rePairRequired = pairingState.rePairRequired,
+        hasConfirmedPairing = pairingState.serverPairingConfirmed,
+        legacyBootstrapResolved = pairingState.legacyP2aBootstrapEvaluated,
     )

@@ -17,6 +17,7 @@ import com.edu.ackline.network.TailnetHttpsConnectionFactory
 import com.edu.ackline.pairing.PairingClaimClient
 import com.edu.ackline.pairing.PairingProvisioner
 import com.edu.ackline.pairing.FidRePairManager
+import com.edu.ackline.pairing.isPackageUpgrade
 import com.edu.ackline.pairing.FidRePairStore
 import com.edu.ackline.push.AlertIngestion
 import com.edu.ackline.recovery.HttpsRecoveryRemoteClient
@@ -130,6 +131,7 @@ class AcklineApplication : Application() {
             publishUpdatedState = SetupState::onRePairUpdated,
             publishRegistration = SetupState::onRegistered,
             diagnosticLogger = { message -> Log.e(TAG, message) },
+            packageUpgrade = isPackageUpgrade(this),
         )
     }
 
@@ -177,6 +179,11 @@ class AcklineApplication : Application() {
                 Log.e(TAG, "payload key provisioning failed")
                 SetupState.onEncryptionStatusChanged(false)
             } finally {
+                val ackProvisioned = ackBaseUrlProvider.isProvisioned()
+                SetupState.onAckProvisioningChanged(ackProvisioned)
+                fidRePairManager.onStartupProvisioningResolved(
+                    SetupState.state.value.encryptionReady, ackProvisioned,
+                )
                 recoveryTriggers.onStartup()
             }
         }

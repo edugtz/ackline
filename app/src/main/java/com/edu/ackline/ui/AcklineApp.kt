@@ -3,6 +3,15 @@ package com.edu.ackline.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.edu.ackline.SetupState
+import com.edu.ackline.feature.onboarding.OnboardingScreen
+import com.edu.ackline.feature.onboarding.rememberNotificationPermissionAction
+import com.edu.ackline.feature.pairing.PairingPresentation
+import com.edu.ackline.feature.pairing.PairingViewModel
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,14 +30,25 @@ private sealed interface AppScreen {
 
 @Composable
 fun AcklineApp() {
+    val setup by SetupState.state.collectAsState()
+    val pairing: PairingViewModel = viewModel()
+    val presentation by pairing.presenter.state.collectAsState()
+    var enteredInbox by rememberSaveable { mutableStateOf(false) }
+    rememberNotificationPermissionAction()
+    val showOnboarding = setup.needsOnboarding ||
+        (!enteredInbox && (presentation == PairingPresentation.Pairing || presentation == PairingPresentation.Success))
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Inbox) }
 
-    BackHandler(enabled = currentScreen !is AppScreen.Inbox) {
+    BackHandler(enabled = !showOnboarding && currentScreen !is AppScreen.Inbox) {
         currentScreen = AppScreen.Inbox
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        when (val screen = currentScreen) {
+        if (!setup.legacyBootstrapResolved && !setup.hasConfirmedPairing) {
+            Text("Preparando Ackline…")
+        } else if (showOnboarding) {
+            OnboardingScreen(setup, pairing, onInbox = { enteredInbox = true })
+        } else when (val screen = currentScreen) {
             AppScreen.Inbox -> InboxScreen(
                 onAlertClick = { notificationId ->
                     currentScreen = AppScreen.Detail(notificationId)

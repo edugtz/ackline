@@ -1,10 +1,22 @@
 package com.edu.ackline.network
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AckBaseUrlProviderTest {
+
+    @Test
+    fun provisionedSignalExcludesFallbackAndSurvivesProviderReload() {
+        val storage = InMemoryAckBaseUrlStorage()
+        val provider = AckBaseUrlProvider("https://fallback.example", storage)
+        assertFalse(provider.isProvisioned())
+        assertEquals(AckBaseUrlProvider.SetResult.STORED, provider.setProvisionedBaseUrl("https://paired.example"))
+        assertTrue(AckBaseUrlProvider("https://fallback.example", storage).isProvisioned())
+        provider.clearProvisionedBaseUrl()
+        assertFalse(provider.isProvisioned())
+    }
 
     @Test
     fun provisionedValueWinsOverBuildFallback() {

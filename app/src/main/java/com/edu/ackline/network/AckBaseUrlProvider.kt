@@ -36,6 +36,11 @@ class AckBaseUrlProvider internal constructor(
             ?.takeIf { it.isNotBlank() }
             ?: fallbackBaseUrl
 
+    /** Runtime provisioning only; the build fallback is never pairing evidence. */
+    fun isProvisioned(): Boolean = runCatching {
+        storage.read()?.let(::normalizeHttpsBaseUrl) != null
+    }.getOrDefault(false)
+
     fun setProvisionedBaseUrl(baseUrl: String): SetResult {
         val normalized = normalizeHttpsBaseUrl(baseUrl)
             ?: return SetResult.INVALID_URL

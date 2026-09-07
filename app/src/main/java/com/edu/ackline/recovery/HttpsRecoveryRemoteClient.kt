@@ -9,14 +9,21 @@ import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
 import java.nio.charset.CodingErrorAction
 import javax.net.ssl.HttpsURLConnection
+import com.edu.ackline.network.AckBaseUrlProvider
 import com.edu.ackline.network.HttpsConnectionFactory
 
 class HttpsRecoveryRemoteClient(
-    private val ackBaseUrl: String,
+    private val ackBaseUrlProvider: AckBaseUrlProvider,
     private val connectionFactory: HttpsConnectionFactory,
 ) : RecoveryRemoteClient {
 
+    constructor(
+        ackBaseUrl: String,
+        connectionFactory: HttpsConnectionFactory,
+    ) : this(AckBaseUrlProvider(ackBaseUrl), connectionFactory)
+
     override fun fetchPending(): RecoveryRemoteResult {
+        val ackBaseUrl = ackBaseUrlProvider.getBaseUrl()
         if (ackBaseUrl.isBlank()) {
             return RecoveryRemoteResult.NotConfigured
         }

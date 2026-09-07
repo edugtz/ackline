@@ -70,6 +70,20 @@ internal class FidRePairStore(
             next
         }
     }
+
+    fun confirmServerPairing(currentFid: String): FidRePairState = synchronized(lock) {
+        require(currentFid.isNotBlank())
+
+        val current = storage.read()
+        val next = FidRePairState(
+            lastObservedFid = currentFid,
+            rePairRequired = false,
+        )
+        if (next != current && !storage.write(next)) {
+            throw IllegalStateException("FID pairing state could not be persisted")
+        }
+        next
+    }
 }
 
 private class SharedPreferencesFidRePairStorage(

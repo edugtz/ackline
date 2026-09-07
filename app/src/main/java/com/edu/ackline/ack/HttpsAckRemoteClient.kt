@@ -3,18 +3,24 @@ package com.edu.ackline.ack
 import java.io.IOException
 import java.net.URI
 import java.net.URL
-import javax.net.ssl.HttpsURLConnection
+import com.edu.ackline.network.AckBaseUrlProvider
 import com.edu.ackline.network.HttpsConnectionFactory
 
 class HttpsAckRemoteClient(
-    private val ackBaseUrl: String,
+    private val ackBaseUrlProvider: AckBaseUrlProvider,
     private val connectionFactory: HttpsConnectionFactory,
 ) : AckRemoteClient {
+
+    constructor(
+        ackBaseUrl: String,
+        connectionFactory: HttpsConnectionFactory,
+    ) : this(AckBaseUrlProvider(ackBaseUrl), connectionFactory)
 
     override fun acknowledge(
         notificationId: String,
         ackToken: String,
     ): AckRemoteResult {
+        val ackBaseUrl = ackBaseUrlProvider.getBaseUrl()
         if (ackBaseUrl.isBlank()) {
             return AckRemoteResult.NotConfigured
         }

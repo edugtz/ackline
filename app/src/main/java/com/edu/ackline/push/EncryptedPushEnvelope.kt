@@ -25,7 +25,7 @@ internal data class EncryptedPushEnvelope(
             if (version != VERSION) return ParseResult.Rejected(Failure.UNSUPPORTED_VERSION)
 
             val kid = data["kid"] ?: return ParseResult.Rejected(Failure.MALFORMED_ENVELOPE)
-            if (!KID_PATTERN.matches(kid)) return ParseResult.Rejected(Failure.MALFORMED_ENVELOPE)
+            if (!isValidKid(kid)) return ParseResult.Rejected(Failure.MALFORMED_ENVELOPE)
 
             val nonce = decodeBase64Url(data["nonce"])
                 ?: return ParseResult.Rejected(Failure.MALFORMED_ENVELOPE)
@@ -52,6 +52,8 @@ internal data class EncryptedPushEnvelope(
 
         fun aad(version: String, kid: String): ByteArray =
             "ackline-e2ee|v=$version|kid=$kid".toByteArray(Charsets.UTF_8)
+
+        internal fun isValidKid(kid: String): Boolean = KID_PATTERN.matches(kid)
 
         private fun decodeBase64Url(value: String?): ByteArray? {
             if (value.isNullOrEmpty() || !BASE64URL_PATTERN.matches(value) || value.length % 4 == 1) {

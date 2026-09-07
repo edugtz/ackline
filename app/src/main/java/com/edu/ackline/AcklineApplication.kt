@@ -11,8 +11,11 @@ import com.edu.ackline.ack.LocalAcknowledgmentManager
 import com.edu.ackline.data.AlertRepository
 import com.edu.ackline.data.local.AcklineDatabase
 import com.edu.ackline.notifications.AcklineNotificationManager
+import com.edu.ackline.network.AckBaseUrlProvider
 import com.edu.ackline.network.HttpsConnectionFactory
 import com.edu.ackline.network.TailnetHttpsConnectionFactory
+import com.edu.ackline.pairing.PairingClaimClient
+import com.edu.ackline.pairing.PairingProvisioner
 import com.edu.ackline.pairing.FidRePairManager
 import com.edu.ackline.pairing.FidRePairStore
 import com.edu.ackline.push.AlertIngestion
@@ -53,8 +56,12 @@ class AcklineApplication : Application() {
         TailnetHttpsConnectionFactory(applicationContext)
     }
 
+    internal val ackBaseUrlProvider: AckBaseUrlProvider by lazy {
+        AckBaseUrlProvider(this, BuildConfig.ACK_BASE_URL)
+    }
+
     val ackRemoteClient: AckRemoteClient by lazy {
-        HttpsAckRemoteClient(BuildConfig.ACK_BASE_URL, tailnetHttpsConnectionFactory)
+        HttpsAckRemoteClient(ackBaseUrlProvider, tailnetHttpsConnectionFactory)
     }
 
     val ackSyncRunner: AckSyncRunner by lazy {
@@ -86,7 +93,7 @@ class AcklineApplication : Application() {
     }
 
     internal val recoveryRemoteClient: RecoveryRemoteClient by lazy {
-        HttpsRecoveryRemoteClient(BuildConfig.ACK_BASE_URL, tailnetHttpsConnectionFactory)
+        HttpsRecoveryRemoteClient(ackBaseUrlProvider, tailnetHttpsConnectionFactory)
     }
 
     internal val recoveryRunner: RecoveryRunner by lazy {
@@ -123,6 +130,19 @@ class AcklineApplication : Application() {
             publishUpdatedState = SetupState::onRePairUpdated,
             publishRegistration = SetupState::onRegistered,
             diagnosticLogger = { message -> Log.e(TAG, message) },
+        )
+    }
+
+    internal val pairingClaimClient: PairingClaimClient by lazy {
+        PairingClaimClient(tailnetHttpsConnectionFactory)
+    }
+
+    internal val pairingProvisioner: PairingProvisioner by lazy {
+        PairingProvisioner(
+            claim = pairingClaimClient::claim,
+            importRawKey = payloadKeyStore::importRawKey,
+            setProvisionedBaseUrl = ackBaseUrlProvider::setProvisionedBaseUrl,
+            confirmServerPairing = fidRePairManager::markServerPairingConfirmed,
         )
     }
 

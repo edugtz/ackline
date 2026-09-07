@@ -53,6 +53,21 @@ internal class FidRePairManager(
         }
     }
 
+    fun markServerPairingConfirmed(currentFid: String): Boolean = synchronized(lock) {
+        if (currentFid.isBlank()) {
+            log("FID pairing confirmation failed")
+            return@synchronized false
+        }
+
+        try {
+            publishUpdatedState(store.confirmServerPairing(currentFid))
+            true
+        } catch (_: Exception) {
+            log("FID pairing confirmation failed")
+            false
+        }
+    }
+
     private fun log(message: String) {
         runCatching { diagnosticLogger(message) }
     }

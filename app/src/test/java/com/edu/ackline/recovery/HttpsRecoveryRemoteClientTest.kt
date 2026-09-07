@@ -1,6 +1,8 @@
 package com.edu.ackline.recovery
 
+import com.edu.ackline.network.AckBaseUrlProvider
 import com.edu.ackline.network.HttpsConnectionFactory
+import com.edu.ackline.network.InMemoryAckBaseUrlStorage
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -42,6 +44,38 @@ class HttpsRecoveryRemoteClientTest {
         assertFalse(connection.doOutput)
         assertFalse(connection.useCaches)
         assertTrue(connection.disconnected)
+    }
+
+    @Test
+    fun resolvesProvisionedBaseUrlWhenEachRequestExecutes() {
+        val provider = AckBaseUrlProvider(
+            "https://fallback.example",
+            InMemoryAckBaseUrlStorage(),
+        )
+        val requestedUrls = mutableListOf<String>()
+        val client = HttpsRecoveryRemoteClient(provider) { url ->
+            requestedUrls += url.toExternalForm()
+            FakeHttpsURLConnection(
+                url = url,
+                statusCode = 200,
+                responseBody = "{\"ok\":true,\"count\":0,\"items\":[]}",
+            )
+        }
+
+        assertEquals(RecoveryRemoteResult.Success(emptyList()), client.fetchPending())
+        assertEquals(
+            AckBaseUrlProvider.SetResult.STORED,
+            provider.setProvisionedBaseUrl("https://paired.example/api"),
+        )
+        assertEquals(RecoveryRemoteResult.Success(emptyList()), client.fetchPending())
+
+        assertEquals(
+            listOf(
+                "https://fallback.example/notifications/pending",
+                "https://paired.example/api/notifications/pending",
+            ),
+            requestedUrls,
+        )
     }
 
     @Test

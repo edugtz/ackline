@@ -72,6 +72,45 @@ class PayloadKeyStoreTest {
     }
 
     @Test
+    fun directImportAcceptsExact32ByteKeyAndLeavesExistingAliasUntouched() {
+        assertEquals(
+            PayloadKeyStore.ImportResult.IMPORTED,
+            keyStore.importRawKey(TEST_KEY, TEST_KID),
+        )
+        assertTrue(keyStore.isReady(TEST_KID))
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            Cipher.DECRYPT_MODE,
+            requireNotNull(keyStore.getDecryptKey(TEST_KID)),
+            GCMParameterSpec(128, ByteArray(12) { it.toByte() }),
+        )
+        cipher.updateAAD(EncryptedPushEnvelope.aad("1", "test-vector"))
+        assertEquals(
+            VECTOR_PLAINTEXT,
+            cipher.doFinal(Base64.getUrlDecoder().decode(VECTOR_CIPHERTEXT))
+                .toString(Charsets.UTF_8),
+        )
+
+        val replacement = ByteArray(32) { 7 }
+        assertEquals(
+            PayloadKeyStore.ImportResult.ALREADY_READY,
+            keyStore.importRawKey(replacement, TEST_KID),
+        )
+        assertTrue(keyStore.isReady(TEST_KID))
+        replacement.fill(0)
+    }
+
+    @Test
+    fun directImportRejectsWrongKeySize() {
+        assertEquals(
+            PayloadKeyStore.ImportResult.INVALID_KEY,
+            keyStore.importRawKey(ByteArray(31), TEST_KID),
+        )
+        assertFalse(keyStore.isReady(TEST_KID))
+    }
+
+    @Test
     fun missingAliasFailsClosedWithoutDecrypting() {
         val envelope = EncryptedPushEnvelope(
             version = "1",

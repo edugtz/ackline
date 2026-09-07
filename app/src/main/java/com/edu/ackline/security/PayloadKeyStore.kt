@@ -3,6 +3,7 @@ package com.edu.ackline.security
 import android.content.Context
 import android.security.keystore.KeyProperties
 import android.security.keystore.KeyProtection
+import com.edu.ackline.push.EncryptedPushEnvelope
 import java.io.File
 import java.io.RandomAccessFile
 import java.security.KeyStore
@@ -17,6 +18,36 @@ class PayloadKeyStore(context: Context) {
 
     fun getDecryptKey(kid: String): SecretKey? =
         (loadKeyStore().getKey(aliasFor(kid), null) as? SecretKey)
+
+    /**
+     * Imports a pairing response key directly from memory. Existing aliases
+     * are intentionally preserved: P2 pairing is not key rotation.
+     * The caller owns [rawKey] and must clear it after this call returns.
+     */
+    fun importRawKey(rawKey: ByteArray, kid: String): ImportResult {
+        return try {
+            val keyStore = loadKeyStore()
+            if (keyStore.containsAlias(aliasFor(kid))) {
+                ImportResult.ALREADY_READY
+            } else if (!EncryptedPushEnvelope.isValidKid(kid)) {
+                ImportResult.INVALID_KEY
+            } else if (rawKey.size != KEY_BYTES) {
+                ImportResult.INVALID_KEY
+            } else {
+                keyStore.setEntry(
+                    aliasFor(kid),
+                    KeyStore.SecretKeyEntry(SecretKeySpec(rawKey, "AES")),
+                    KeyProtection.Builder(KeyProperties.PURPOSE_DECRYPT)
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .build(),
+                )
+                ImportResult.IMPORTED
+            }
+        } catch (_: Exception) {
+            ImportResult.FAILED
+        }
+    }
 
     /**
      * Imports the sole staged key exactly once. The staging file is always

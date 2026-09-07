@@ -1,6 +1,8 @@
 package com.edu.ackline.ack
 
+import com.edu.ackline.network.AckBaseUrlProvider
 import com.edu.ackline.network.HttpsConnectionFactory
+import com.edu.ackline.network.InMemoryAckBaseUrlStorage
 import java.io.IOException
 import java.io.InputStream
 import java.net.URL
@@ -89,6 +91,40 @@ class HttpsAckRemoteClientTest {
         assertFalse(connection.useCaches)
         assertEquals("test-token", connection.getRequestProperty("X-Ack-Token"))
         assertTrue(connection.disconnected)
+    }
+
+    @Test
+    fun resolvesProvisionedBaseUrlWhenEachRequestExecutes() {
+        val provider = AckBaseUrlProvider(
+            "https://fallback.example",
+            InMemoryAckBaseUrlStorage(),
+        )
+        val requestedUrls = mutableListOf<String>()
+        val client = HttpsAckRemoteClient(provider) { url ->
+            requestedUrls += url.toExternalForm()
+            FakeHttpsURLConnection(url, 200)
+        }
+
+        assertEquals(
+            AckRemoteResult.Success,
+            client.acknowledge("first", "token"),
+        )
+        assertEquals(
+            AckBaseUrlProvider.SetResult.STORED,
+            provider.setProvisionedBaseUrl("https://paired.example/api"),
+        )
+        assertEquals(
+            AckRemoteResult.Success,
+            client.acknowledge("second", "token"),
+        )
+
+        assertEquals(
+            listOf(
+                "https://fallback.example/ack/first",
+                "https://paired.example/api/ack/second",
+            ),
+            requestedUrls,
+        )
     }
 
     @Test

@@ -152,6 +152,48 @@ class FidRePairManagerTest {
         assertTrue(harness.updatedStates.isEmpty())
     }
 
+    @Test
+    fun serverConfirmedPairingRecordsCurrentFidAndClearsRePairRequirement() {
+        val storage = InMemoryFidRePairStorage(FidRePairState("old", true))
+        val harness = harness(storage)
+
+        assertTrue(harness.manager.markServerPairingConfirmed("current"))
+
+        assertEquals(FidRePairState("current", false), storage.state)
+        assertEquals(FidRePairState("current", false), harness.updatedStates.single())
+    }
+
+    @Test
+    fun laterInPlaceFidChangeRequiresRePairAfterServerConfirmation() {
+        val harness = Harness()
+
+        assertTrue(harness.manager.markServerPairingConfirmed("A"))
+        harness.manager.onRegistered("B")
+
+        assertEquals(FidRePairState("B", true), harness.observedStates.single())
+    }
+
+    @Test
+    fun failedServerConfirmedPairingDoesNotPublishOrReportSuccess() {
+        val storage = InMemoryFidRePairStorage(FidRePairState("old", true))
+        storage.writesSucceed = false
+        val harness = harness(storage)
+
+        assertFalse(harness.manager.markServerPairingConfirmed("current"))
+
+        assertEquals(FidRePairState("old", true), storage.state)
+        assertTrue(harness.updatedStates.isEmpty())
+    }
+
+    @Test
+    fun blankServerConfirmedFidIsRejected() {
+        val harness = Harness()
+
+        assertFalse(harness.manager.markServerPairingConfirmed(" "))
+
+        assertTrue(harness.updatedStates.isEmpty())
+    }
+
     private fun harness(storage: InMemoryFidRePairStorage = InMemoryFidRePairStorage()): Harness =
         Harness(storage)
 

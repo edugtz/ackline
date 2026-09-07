@@ -10,15 +10,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,15 +34,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.edu.ackline.AcklineApplication
 import com.edu.ackline.RegistrationState
 import com.edu.ackline.SetupState
+import com.edu.ackline.ui.AcklineTopBar
 
 /**
- * Phase 0 setup/debug surface. Intentionally utilitarian: registration state,
- * device ID (FID), and the last fake test message. No production inbox UI.
+ * User-facing "Ajustes" screen (Phase 9 Change C).
+ *
+ * Presents the same app/setup state as the former technical bootstrap
+ * surface — notification permission, push registration, encryption state,
+ * Device ID (FID) and last test message — grouped into a coherent settings
+ * layout using the Ackline teal visual system. Presentation only: no state
+ * semantics or behavior were added or changed.
  */
 @Composable
 fun SetupScreen(onBack: (() -> Unit)? = null) {
@@ -56,92 +68,123 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
         notificationGranted = granted
     }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
-    ) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { AcklineTopBar(title = "Ajustes", onBack = onBack) },
+    ) { contentPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .safeDrawingPadding()
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(contentPadding)
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            if (onBack != null) {
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.Start),
-                ) {
-                    Text("Volver")
-                }
-            }
-            Text(
-                text = "Ackline",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = "Push setup",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // ── Status summary — honest aggregate of the rows below only.
+            val registrationReady =
+                setupState.registrationState == RegistrationState.Ready
+            val allReady = notificationGranted &&
+                registrationReady &&
+                setupState.installationId != null &&
+                setupState.encryptionReady &&
+                !setupState.rePairRequired
 
-            Spacer(Modifier.height(4.dp))
-
-            SetupRow(
-                label = "Notification permission",
-                value = if (notificationGranted) "Granted" else "Not granted",
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
-                Button(
-                    onClick = { permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                ) {
-                    Text("Request permission")
-                }
-            }
-
-            SetupRow(
-                label = "FCM registration",
-                value = when (setupState.registrationState) {
-                    RegistrationState.Ready -> "Ready"
-                    RegistrationState.Waiting -> "Waiting"
-                    RegistrationState.Error -> "Error"
-                },
-            )
-
-            SetupRow(
-                label = "Cifrado",
-                value = if (setupState.encryptionReady) "Listo" else "No configurado",
-            )
-
-            val installationId = setupState.installationId
-            Column {
+            SetupSection(title = "Estado") {
                 Text(
-                    text = "Device ID",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "Estado de Ackline",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
-                Spacer(Modifier.height(2.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
+                Text(
+                    text = when {
+                        allReady -> "Todo listo"
+                        setupState.registrationState == RegistrationState.Error ->
+                            "Pendiente — error en el registro push"
+                        else -> "Pendiente"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (allReady) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                if (!allReady) {
                     Text(
-                        text = installationId ?: "Waiting",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f),
+                        text = "Revisa las secciones marcadas como pendientes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (installationId != null) {
-                        OutlinedButton(
-                            onClick = { copyDeviceId(context, installationId) },
-                        ) {
-                            Text("Copy")
+                }
+            }
+
+            // ── Notifications
+            SetupSection(title = "Notificaciones") {
+                StatusRow(
+                    label = "Permiso de notificaciones",
+                    value = if (notificationGranted) "Permitido" else "No permitido",
+                    ok = notificationGranted,
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationGranted) {
+                    Button(
+                        onClick = {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        },
+                    ) {
+                        Text("Solicitar permiso")
+                    }
+                }
+                StatusRow(
+                    label = "Registro push",
+                    value = when (setupState.registrationState) {
+                        RegistrationState.Ready -> "Listo"
+                        RegistrationState.Waiting -> "Esperando"
+                        RegistrationState.Error -> "Error"
+                    },
+                    ok = registrationReady,
+                )
+            }
+
+            // ── Security
+            SetupSection(title = "Seguridad") {
+                StatusRow(
+                    label = "Cifrado",
+                    value = if (setupState.encryptionReady) "Listo" else "No configurado",
+                    ok = setupState.encryptionReady,
+                )
+            }
+
+            // ── Device
+            SetupSection(title = "Dispositivo") {
+                val installationId = setupState.installationId
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "ID del dispositivo",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = installationId ?: "Esperando",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (installationId != null) {
+                            OutlinedButton(
+                                onClick = { copyDeviceId(context, installationId) },
+                            ) {
+                                Text("Copiar")
+                            }
                         }
                     }
                 }
                 if (setupState.rePairRequired) {
-                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = "El Device ID cambió. Actualiza ackline-fid en Hermes.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -170,26 +213,88 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                 }
             }
 
-            SetupRow(
-                label = "Last test message",
-                value = setupState.lastMessageSummary ?: "Waiting for a message",
+            // ── Diagnostics — deliberately quieter than the sections above.
+            SetupSection(title = "Diagnóstico", quiet = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Última prueba",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = setupState.lastMessageSummary ?: "Esperando un mensaje",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Section pattern for Ajustes: compact uppercase section label above one
+ * tonal card. `quiet` sections recede a layer (used for diagnostics).
+ */
+@Composable
+private fun SetupSection(
+    title: String,
+    quiet: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = title.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            color = if (quiet) {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            },
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                content = content,
             )
         }
     }
 }
 
+/**
+ * Read-only status row: label + text value. Status is expressed with text,
+ * never color alone. No switches — this screen only reads state (plus the
+ * existing permission-request action).
+ */
 @Composable
-private fun SetupRow(label: String, value: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun StatusRow(
+    label: String,
+    value: String,
+    ok: Boolean,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Medium,
+            color = if (ok) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.error
+            },
         )
     }
 }

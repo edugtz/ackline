@@ -3,7 +3,6 @@ package com.edu.ackline.feature.detail
 import android.app.Application
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -21,15 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -39,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.edu.ackline.model.AlertLevel
+import com.edu.ackline.ui.AcklineTopBar
 import com.edu.ackline.ui.SeverityChip
 import com.edu.ackline.ui.severityColor
 import java.time.Instant
@@ -60,7 +53,7 @@ fun AlertDetailScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { DetailNavBar(onBack = onBack) },
+        topBar = { AcklineTopBar(title = "Detalle de alerta", onBack = onBack) },
     ) { contentPadding ->
         Column(
             modifier = Modifier
@@ -93,84 +86,6 @@ fun AlertDetailScreen(
                 }
             }
         }
-    }
-}
-
-/**
- * Intentional navigation band: back affordance on the leading edge,
- * screen title in the same row, on a surface layer above the screen body.
- */
-@Composable
-private fun DetailNavBar(onBack: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Back affordance — compact visuals, but the hit area is
-            // enforced to >= 48dp (accessibility M2 fix).
-            Box(
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .clickable(
-                        role = Role.Button,
-                        onClickLabel = "Volver al inbox",
-                        onClick = onBack,
-                    ),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    ChevronLeft(
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Atrás",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "Detalle de alerta",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(end = 16.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ChevronLeft(color: Color) {
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier
-            .height(18.dp)
-            .width(18.dp),
-    ) {
-        val path = Path().apply {
-            moveTo(size.width * 0.62f, size.height * 0.18f)
-            lineTo(size.width * 0.30f, size.height * 0.50f)
-            lineTo(size.width * 0.62f, size.height * 0.82f)
-        }
-        drawPath(
-            path = path,
-            color = color,
-            style = Stroke(width = size.minDimension * 0.09f, cap = StrokeCap.Round),
-        )
     }
 }
 

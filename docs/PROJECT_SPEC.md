@@ -198,7 +198,7 @@ MVP setup may expose:
 
 Do not turn setup into an operations dashboard.
 
-### 9.4 Guided Pairing (Post-MVP P2 — intended direction)
+### 9.4 Guided Pairing (Post-MVP P2 — P2A implemented, P2B next)
 
 Normal user setup must not require:
 
@@ -222,8 +222,18 @@ Tailscale on the phone remains a user-visible prerequisite for
 pairing, ACK, and recovery — P2 does not promise zero-configuration
 setup. The product stays intentionally single-user / single-device;
 re-pairing an existing installation requires explicit replace intent.
-Manual FID copy and adb key staging remain the working procedures until
-P2 ships, then become debug/recovery fallback.
+
+```text
+P2A capability (protocol + provisioning foundation): IMPLEMENTED
+  (Hermes H1 + Ackline A1, physically integrated —
+  see docs/P2A_QA_RESULTS.md).
+P2B product UX (onboarding wizard, QR scan, re-pair): NEXT.
+```
+
+Do not claim the P2B UX already exists. Manual FID copy and adb key
+staging are now legacy/debug fallback only; normal setup is intended to
+use guided P2 pairing (P2B builds the UX on the implemented P2A
+protocol).
 
 ## 10. UX Direction
 

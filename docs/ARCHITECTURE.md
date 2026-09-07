@@ -361,12 +361,12 @@ Mac raw key stays outside repo.
 
 Android raw staging is already deleted after import.
 
-> **P2 NOTE (intended, not implemented):** adb staging remains supported
-> as an operational/debug fallback, but guided pairing becomes the
-> intended user setup path once P2 ships: Hermes releases the existing
-> key once inside an authorized pairing-claim response over tailnet TLS,
-> and the phone imports directly to Keystore. The raw key NEVER crosses
-> QR / code / logs / UI / clipboard.
+> **P2A IMPLEMENTED:** adb staging remains supported ONLY as a
+> legacy/debug fallback. The implemented normal path is P2A guided
+> pairing: Hermes releases the existing key once inside an authorized
+> pairing-claim response over tailnet TLS, and the phone imports directly
+> to Keystore. The raw key NEVER crosses QR / code / logs / UI /
+> clipboard. P2B builds the product UX on this implemented protocol.
 
 No key rotation in P2 — rotation/history/recovery policy is P3
 (see `docs/POST_MVP_PHASES.md`). P2 only provisions the existing current
@@ -408,8 +408,8 @@ Hermes uses `~/.hermes/secrets/ackline-fid` as its one durable local
 configuration source. Single-device, last-writer-wins semantics remain;
 there is no multi-device registry (P8 stays out of scope).
 
-Phase 7 (implemented, current behavior): Hermes never writes the file;
-the operator provisions it manually by copying the current FID.
+Phase 7 (implemented, pre-P2A behavior — manual path now legacy fallback):
+Hermes never wrote the file; the operator provisioned it manually by copying the current FID.
 Ackline persists the last observed FID, detects FID registration/change,
 sets `rePairRequired`, enqueues event-driven recovery, and surfaces an
 actionable re-pair warning in Setup. `rePairRequired` survives process
@@ -417,18 +417,16 @@ restart and clears only through an explicit Setup action
 ("Mark as updated") after the operator updates
 `~/.hermes/secrets/ackline-fid` with the current FID.
 
-> **SUPERSEDED FOR P2 (intended, not implemented):** "Hermes never
-> writes `ackline-fid`", "no automatic provisioning under any
-> circumstance", and "manual FID copy is permanent" are superseded as
-> architecture. New intended boundary (see §18): Hermes may update its
-> own single-device FID configuration ONLY through an explicit
-> short-lived pairing session authorized by Tailscale identity plus a
-> one-time secret, with explicit replace intent when overwriting an
-> existing FID. This is NOT a standing automatic-registration endpoint:
-> token-less auto-registration is rejected (any tailnet identity could
-> silently repoint delivery and request the E2EE key). Manual FID copy
-> remains the operational procedure until P2 ships, then becomes
-> debug/recovery fallback.
+> **P2A IMPLEMENTED:** "Hermes never writes `ackline-fid`" and "no
+> automatic provisioning under any circumstance" are superseded as
+> architecture. Implemented boundary (see §18): Hermes updates its own
+> single-device FID configuration ONLY through an explicit short-lived
+> pairing session authorized by Tailscale identity plus a one-time secret,
+> with explicit replace intent when overwriting an existing FID
+> (canonical error: `replace_required`; `already_paired` is stale). This
+> is NOT a standing automatic-registration endpoint: token-less
+> auto-registration remains rejected. Manual FID copy is now
+> legacy/manual fallback only; normal setup uses guided P2 pairing.
 
 ---
 
@@ -700,10 +698,13 @@ Mechanical reuse of the proven Phase 5/6 receive path.
   observation → baseline, `rePairRequired = false`. Later different FID →
   store new FID, `rePairRequired = true`, enqueue recovery.
 - Setup shows an actionable re-pair warning. `rePairRequired` survives
-  process restarts and clears only through an explicit Setup action
-  ("Mark as updated") after the operator updates
-  `~/.hermes/secrets/ackline-fid` with the current FID.
-- No device registry, no server write for FID, no automatic provisioning.
+  process restarts and clears through server-confirmed P2A claim success;
+  the legacy honor-system Setup action ("Mark as updated") after manual
+  `~/.hermes/secrets/ackline-fid` update remains only until P2B removes
+  it (P2B hardening item).
+- No device registry. No standing token-less registration. Manual FID copy
+  is legacy/manual fallback; the implemented path is authorized pairing
+  claim (see §18).
 - FID re-pair was performed manually during final QA: uninstall/reinstall
   generated a new FID and erased `FidRePairStore`, so the new FID became
   the fresh-install baseline; FID-registration recovery executed and
@@ -780,7 +781,8 @@ Do **not** claim:
   never starts;
 - periodic WorkManager recovery;
 - delivery receipt semantics;
-- FID automatic provisioning;
+- standing token-less FID automatic provisioning (the ONLY authorized
+  FID-write path is the P2A pairing claim — see §18);
 - that a single recovery run physically exercised the full chain
   recovery → notification shown → Visto → ACK (component-level evidence
   only; see §17.9);
@@ -807,13 +809,14 @@ configured but post-reboot auto-start has not been physically verified yet.
 
 ---
 
-## 18. Post-MVP P2 Pairing/Provisioning Boundary (INTENDED — NOT IMPLEMENTED)
+## 18. Post-MVP P2 Pairing/Provisioning Boundary (IMPLEMENTED — P2A)
 
-> Nothing in this section is implemented. It records the authorized P2
-design direction so Phase 7 constraints are not misread as permanent.
-> Active build plan: `docs/IMPLEMENTATION_PLAN.md` (P2A).
+> This section documents the implemented P2A boundary (Hermes H1 +
+> Ackline A1, physically integrated — see `docs/P2A_QA_RESULTS.md`). P2B
+> builds the product UX on this frozen contract; P2C remains planned.
+> Active build plan: `docs/IMPLEMENTATION_PLAN.md` (P2B).
 
-### 18.1 Intended pairing flow
+### 18.1 Implemented pairing flow (P2A)
 
 ```text
 Mac issues short-lived, single-use pairing session (fresh | replace)
@@ -851,9 +854,15 @@ confirmation, then runs the P2C end-to-end self-test
 
 ### 18.3 What P2 deliberately revises
 
-- Hermes gains exactly one authorized write path for `ackline-fid`:
-  valid pairing claim only. No standing registration endpoint.
-- adb staging + manual FID copy + honor-system "Mark as updated"
-  move from primary procedure to debug/recovery fallback.
+- Hermes has exactly one authorized write path for `ackline-fid`:
+  valid pairing claim only (implemented). No standing registration
+  endpoint.
+- adb staging + manual FID copy + honor-system "Mark as updated" are now
+  legacy/debug fallback (honor-system removal is a P2B task).
 - Setup gains a server-confirmed paired state; `rePairRequired` clears
   on claim success, not on self-attestation.
+- Raw key never crosses QR; raw key never persists in the pairing DB;
+  Ackline stores the key only in AndroidKeyStore and the provisioned ACK
+  URL in app-private runtime config; ACK/recovery resolve the runtime URL
+  dynamically. Single-device semantics remain. P2A does not implement key
+  rotation (P3).

@@ -80,7 +80,22 @@ Do not redesign for novelty or add features unrelated to observed friction.
 > Tailscale on the phone remains a user-visible prerequisite for
 > pairing/ACK/recovery. P2 does not promise zero-configuration setup.
 
-### P2A — Pairing backend/protocol (NEXT ACTIVE IMPLEMENTATION UNIT)
+### P2A — Pairing backend/protocol (COMPLETE)
+
+Implemented and physically integrated (Hermes H1 + Ackline A1;
+`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS). Landed architecture:
+one-time short-lived pairing sessions, hash-only token persistence,
+atomic consume-once, explicit replace intent (`replace_required` is the
+canonical differing-FID error; `already_paired` is stale), one-time E2EE
+key release over Tailnet HTTPS, `ack_base_url` provisioned in the claim
+response, rate limiting, sanitized typed errors, direct Keystore import,
+server-confirmed FID baseline, dynamic ACK/recovery URL resolution, no
+Room migration, no UI. Physical proof: real FCM through provisioned FID,
+real E2EE decrypt, Room exactly-once, provisioned ACK URL, Hermes ACK
+sync. Non-blocking finding: native notification display NOT proven
+(`POST_NOTIFICATIONS` denied at delivery time) — P2B onboards permission
+before pairing/verification. Manual adb staging + manual `ackline-fid`
+copy are now legacy/debug fallback, not the normal path.
 
 - pairing-session issuance (short TTL, single use, token hashes only,
   constant-time comparison, atomic consume);
@@ -94,16 +109,31 @@ Do not redesign for novelty or add features unrelated to observed friction.
   adb staging-file import retained only as debug/recovery fallback;
 - server-confirmed FID baseline / `rePairRequired` clear.
 - QR scanner UI is NOT P2A; it belongs to P2B.
-- See `docs/IMPLEMENTATION_PLAN.md` (P2A is the active plan).
+- See `docs/P2A_QA_RESULTS.md` (evidence). `docs/IMPLEMENTATION_PLAN.md`
+  now holds the active P2B plan.
 
-### P2B — Guided onboarding + re-pair (PLANNED, not active)
+### P2B — Guided onboarding + re-pair (CURRENT ACTIVE)
+
+Expected scope: guided first-run setup (Bienvenido → permission →
+Tailscale prerequisite → pair → verifying → Todo listo), QR/code pairing
+UX on the frozen P2A contract, notification permission before final ready
+state, Tailscale-off explanation, re-pair flow replacing the manual
+"Mark as updated" honor-system action, quiet/minimal diagnostics, no
+secret exposure. Removes the manual FID workflow from normal UX;
+operator-friendly pairing initiation on the Hermes side. No P2C self-test
+beyond placeholder/navigation; no key rotation (P3); no deeper
+diagnostics (P5); no multi-device (P8).
 
 - first-run wizard (Bienvenido → permission → pair → verifying → Todo listo);
 - QR scan primary, short-code entry fallback;
 - re-pair flow replacing the manual "Mark as updated" honor-system action;
 - no FID / file-path / Firebase jargon in user-facing copy.
 
-### P2C — Self-test + minimal setup health (PLANNED, not active)
+### P2C — Self-test + minimal setup health (PLANNED — still future)
+
+Kept scope: end-to-end self-test + minimal health surface (last push,
+pending ACK count, last ACK sync, last reconciliation, app/build
+version).
 
 - phone-initiated end-to-end self-test (Hermes → FCM → decrypt → persist →
   ACK → Hermes) using the production E2EE protocol;
@@ -112,9 +142,8 @@ Do not redesign for novelty or add features unrelated to observed friction.
 ### Recommended AI Route
 
 ```text
-P2A: strongest-reasoning architecture/threat model → appropriate code agent
-     → independent security review required
-P2B: Android/Compose implementation + physical Oppo QA
+P2A: complete (see docs/P2A_QA_RESULTS.md)
+P2B: Android/Compose implementation + physical Oppo UX review
 P2C: cross-system correctness review
 ```
 

@@ -7,7 +7,9 @@
 **PHASE 9 COMPLETE — PRODUCT UX ACCEPTED ON PHYSICAL OPPO**
 **PHASE 8 DEFERRED — FINAL REAL-WORLD USAGE / RELIABILITY GATE (not PASS)**
 **POST-MVP P2 — CURRENT ACTIVE AREA (Better Pairing / Guided Setup)**
-**P2A — NEXT ACTIVE IMPLEMENTATION SLICE (pairing backend/protocol)**
+**P2A — COMPLETE (PASS_WITH_FINDINGS — see docs/P2A_QA_RESULTS.md)**
+**P2B — CURRENT ACTIVE SLICE (Guided Pairing / Onboarding / Re-pair UX)**
+**P2C — PLANNED**
 
 Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
@@ -33,11 +35,14 @@ Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICA
 Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout recorded by this documentation change
 ```
 
-Current change: **none — P2A implementation not yet started.**
+Current change: **P2A implementation COMPLETE; P2A docs closeout recorded by this change.**
 
-Next actual step: **P2A — pairing backend/protocol**
-(see `docs/IMPLEMENTATION_PLAN.md`). P2B (guided onboarding + re-pair UX)
-and P2C (self-test + minimal health) are planned, not active.
+Next actual step: **P2B — Guided Pairing / Onboarding / Re-pair UX**
+(see `docs/IMPLEMENTATION_PLAN.md`). P2A backend/protocol and Android
+provisioning foundation are now implemented and physically integrated
+(Hermes H1 + Ackline A1, `docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS).
+P2B is now the active product-facing slice. P2C (self-test + minimal
+health) remains planned, not active.
 
 Phase 8 — multi-day real-world Oppo usage/reliability gate — is
 **DEFERRED** until Ackline has completed the selected post-MVP
@@ -56,15 +61,16 @@ file editing, or Firebase/Hermes-path knowledge. Full direction in
 `docs/IMPLEMENTATION_PLAN.md`.
 
 ```text
-P2A  pairing backend/protocol     NEXT — authorized to implement
-P2B  guided onboarding + re-pair  PLANNED — not active (owns QR scanner UI)
+P2A  pairing backend/protocol     COMPLETE — implemented + physically integrated (PASS_WITH_FINDINGS)
+P2B  guided onboarding + re-pair  CURRENT — authorized to implement (owns QR scanner UI)
 P2C  self-test + minimal health   PLANNED — not active
 ```
 
-Legacy setup procedures (adb E2EE staging, manual FID copy into
-`~/.hermes/secrets/ackline-fid`, honor-system "Mark as updated") remain
-operational today and become debug/recovery fallback once P2 ships. They
-are NOT removed by this documentation change.
+Manual setup paths are now legacy/debug fallback, not the normal user path:
+adb E2EE staging, manual FID copy into `~/.hermes/secrets/ackline-fid`,
+and the honor-system "Mark as updated" action (scheduled for P2B removal).
+Normal setup is intended to use guided P2 pairing (P2B builds the UX on the
+implemented P2A protocol).
 
 ---
 
@@ -602,8 +608,12 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Implement **P2A — pairing backend/protocol** per
-   `docs/IMPLEMENTATION_PLAN.md` (Phase 9 product polish is complete).
+1. Implement **P2B — Guided Pairing / Onboarding / Re-pair UX** per
+   `docs/IMPLEMENTATION_PLAN.md`. P2A (Hermes H1 + Ackline A1) is complete
+   and physically integrated (`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS;
+   native notification display NOT PROVEN in that run because
+   `POST_NOTIFICATIONS` was denied at delivery time — P2B places permission
+   onboarding before pairing/verification).
 2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
    executed after the selected post-MVP setup work (P2) is complete and
    Ackline can be used normally; Ackline/FCM is the sole transport under

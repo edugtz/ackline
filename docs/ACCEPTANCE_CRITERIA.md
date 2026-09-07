@@ -205,19 +205,47 @@ product/UX acceptance PASS
 final GitHub review PASS
 ```
 
-## 11. Pairing Acceptance (Post-MVP P2 — applies once P2 ships)
+## 11. Pairing Acceptance (Post-MVP P2 — P2A proven; P2B next)
 
-- No raw E2EE key in QR / code / logs / clipboard / UI / source control.
-- Pairing session expires (short TTL); expired claims fail closed.
+P2A status: IMPLEMENTED and physically integrated
+(`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS). Proven in P2A:
+
+- No raw E2EE key in QR / code / logs / clipboard / UI / source control. — PROVEN (P2A)
+- Pairing session expires (short TTL); expired claims fail closed. — PROVEN (P2A)
 - Single-use enforcement: concurrent or replayed claims yield exactly one
-  success; replays are rejected.
-- Overwriting an existing working FID requires explicit replace intent;
-  failed pairing never overwrites a working FID.
+  success; replays are rejected. — PROVEN (P2A)
+- Overwriting an existing working FID requires explicit replace intent
+  (canonical error `replace_required`; `already_paired` is stale
+  documentation); failed pairing never overwrites a working FID.
+  — PROVEN (P2A: fresh differing FID rejected, explicit replace succeeded)
 - The phone clears `rePairRequired` only on server-confirmed claim
-  success, never on self-attestation.
+  success, never on self-attestation. — PROVEN (P2A provisioning path;
+  honor-system "Marcar como actualizado" removal is a P2B task)
 - A fresh install reaches a usable encrypted state without adb or manual
-  FID editing.
+  FID editing (key + FID + ACK URL provisioned). — PROVEN (P2A:
+  real FCM through provisioned FID, real E2EE decrypt, Room exactly-once,
+  provisioned ACK URL, Hermes ACK sync; no Room migration; no key
+overwrite)
 - Pairing failures explain the failing link in plain language without
-  exposing identifiers, paths, tokens, or protocol internals.
+  exposing identifiers, paths, tokens, or protocol internals. — PROVEN (P2A
+  sanitized typed errors)
+
+NOT PROVEN in the P2A physical run (not failed, not blocking):
+
+- Native notification display at delivery time — `POST_NOTIFICATIONS` was
+  denied when the real canary arrived (decrypt + persist + ACK proven).
+  P2B places notification-permission onboarding before pairing / future
+  setup verification.
+
+P2B acceptance (applies once P2B ships):
 
 These add to — and never weaken — the security/reliability criteria above.
+
+- First-run flow understandable without shell/manual docs.
+- Notification permission requested before final ready state.
+- Tailscale-off state explains the prerequisite.
+- QR scan path works; code/manual fallback works if shipped.
+- Re-pair path works; no "Marcar como actualizado" honor-system requirement.
+- No secret exposure in QR/UI/logs.
+- No fake success state.
+- Physical Oppo UX review + large-font/accessibility/touch-target review.

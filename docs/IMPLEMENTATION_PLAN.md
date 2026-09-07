@@ -1,58 +1,70 @@
-# Post-MVP P2A — Pairing Backend / Protocol Implementation Plan
+# Post-MVP P2B — Guided Pairing / Onboarding / Re-pair UX Implementation Plan
 
 ## 1. Status
 
-**ACTIVE PLAN — NOT YET IMPLEMENTED.**
+**ACTIVE PLAN — P2B.**
 
 Area: `Post-MVP P2 — Better Pairing / Guided Setup`
-Slice: `P2A — pairing backend/protocol`
+Slice: `P2B — guided onboarding + re-pair UX`
 
-P2B (guided onboarding + re-pair UX) and P2C (self-test + minimal health)
-are **planned, not active**. They appear below only as bounded future
-dependencies (§8). Do not implement them in P2A.
+```text
+P2A  pairing backend/protocol     COMPLETE — implemented + physically
+                                  integrated (PASS_WITH_FINDINGS;
+                                  see docs/P2A_QA_RESULTS.md)
+P2B  guided onboarding + re-pair  CURRENT — authorized to implement
+P2C  self-test + minimal health   PLANNED — not active
+```
 
-Historical note: the previous content of this file was the Phase 7
-Recovery and Reconciliation plan (Redesign V2 — all changes landed, merged,
-final QA PASS). That history is preserved in git (`dev` history up to the
-Phase 7 documentation closeout) and in `docs/CURRENT_PHASE.md`; it is not
-repeated here.
+P2A background: Hermes H1 (one-time pairing sessions, `POST
+/pairing/claim`, Tailscale identity gate, atomic consume-once, explicit
+replace intent with canonical `replace_required` error, one-time E2EE key
+release over Tailnet HTTPS, `ack_base_url` in claim response) + Ackline A1
+(`PairingClaimClient`, direct `PayloadKeyStore` raw-key import, staged adb
+import retained as legacy/debug fallback, `AckBaseUrlProvider` with
+provisioned-URL precedence, dynamic ACK/recovery URL resolution,
+server-confirmed FID baseline, ordered `PairingProvisioner`, no Room
+migration). Machine-readable P2A contract is unchanged by P2B. Full
+history in git; physical evidence in `docs/P2A_QA_RESULTS.md`.
+
+Historical note: the previous content of this file was the P2A
+implementation plan, then the Phase 7 Recovery and Reconciliation plan
+(Redesign V2 — all changes landed, merged, final QA PASS). That history is
+preserved in git (`dev` history up to the Phase 7 documentation closeout)
+and in `docs/CURRENT_PHASE.md`; it is not repeated here.
 
 ## 2. Objective
 
-Replace today's manual setup handshake:
+Turn the implemented P2A protocol into a normal-user setup experience:
 
 ```text
-LEGACY (still works, becomes fallback after P2 ships):
-  adb staging of the raw E2EE key + process restart
-  + manual FID copy into ~/.hermes/secrets/ackline-fid
-  + honor-system "Mark as updated" tap
-  + eyeballed verification
-```
-
-with an authorized protocol:
-
-```text
-P2A (this slice — protocol only, no wizard UI):
-  short-lived, single-use pairing session
-  → phone claims over explicit-VPN Tailnet HTTPS
-  → Hermes writes its own ackline-fid (authorized, one-time)
-  → Hermes releases the existing E2EE key once in the claim response
-  → phone imports directly to Keystore, baseline confirmed by server
+fresh install
+→ grant notification permission (BEFORE final ready state)
+→ Tailscale prerequisite surfaced honestly
+→ pair with Hermes (scan QR primary / code entry fallback if chosen)
+→ call existing PairingProvisioner
+→ honest progress/error states
+→ success state ("Todo listo")
+→ re-pair from Ajustes when device/install identity changes
 ```
 
 Product quality goal:
 
-> A fresh install can reach a usable encrypted state without adb, shell
-> commands, manual FID file editing, or Firebase/Hermes-path knowledge —
-> once P2B/P2C complete the experience on top of this protocol.
+> A fresh install reaches a usable encrypted state without adb, shell
+> commands, manual FID file editing, Firebase/Hermes-path knowledge, or
+> an honor-system self-attestation tap — with permission and Tailscale
+> prerequisites explained in plain language.
+
+P2A physical-QA lesson carried in: native notification display was NOT
+proven in P2A because `POST_NOTIFICATIONS` was denied at delivery time.
+P2B therefore places the notification-permission step before pairing /
+future setup verification.
 
 ## 3. Design Authority
 
-The P2 preflight report is the discovery source of truth for this plan.
-Authoritative direction (do not silently revise without evidence):
+P2A contract (frozen, do not revise in P2B):
 
 ```text
-one-time, short-lived pairing session (TTL on the order of minutes)
+short-lived, single-use pairing session (TTL on the order of minutes)
 QR primary, short pairing-code fallback, same backend session model
 pairing claim over existing explicit-VPN Tailnet HTTPS
 existing Tailscale-User-Login identity boundary remains required
@@ -60,114 +72,83 @@ raw E2EE key NEVER in QR / code / logs / UI / clipboard / source control
 no custom cryptography (random bearer token + TLS + existing AES-GCM)
 no accounts, no general device registry, single-device semantics remain
 explicit replace intent required to overwrite an existing FID
+canonical differing-FID fresh-claim error: replace_required
+  (`already_paired` is stale documentation — do not use in new UX copy/logs)
 no Room migration, no Hermes notifications-schema migration
 ```
 
-Standing automatic (token-less) registration is explicitly rejected: any
-tailnet identity could silently repoint push delivery and request the E2EE
-key. The claim endpoint authorizes exactly one FID-write plus one
-key-release — never ACK writes, never notification reads.
+P2B UX constraints:
 
-## 4. Hermes Work
+```text
+no secret exposure (no E2EE key/FID/service credentials in QR;
+  QR may carry pairing endpoint + session_id + one-time token only)
+no fake success state
+failures explain the failing link in plain language without exposing
+  identifiers, paths, tokens, or protocol internals
+remove honor-system "Marcar como actualizado"
+keep support diagnostics quiet/minimal
+redact secret-bearing pairing models (FidRePairState.toString,
+  SetupUiState installationId exposure under review)
+no P2C self-test beyond placeholder/navigation state if needed
+```
 
-### 4.1 Pairing-session issuance
+## 4. Hermes / Operator Experience Work
 
-Operator-issued (e.g. `notification_state.py pairing-begin`), producing:
+Small operator-facing tooling only (separate repo
+`~/.hermes/personal-admin`):
 
-- 128-bit random token (QR form) or a bound short code (fallback form);
-- server-side session: token **hash** only (SHA-256 or better),
-  `created_at`, short expiry, `consumed = false`,
-  intent `fresh | replace`;
-- QR encodes endpoint + token only. No key, no FID, no secret paths.
-- Revoke support (`pairing-revoke`) for a lost/exposed pre-use token.
+- user-friendly pairing initiation against the existing H1 backend;
+- generate/show pairing QR and/or code from a fresh one-time pairing
+  session;
+- short-code/manual-entry fallback if retained;
+- explicit replace intent surfaced where appropriate;
+- never put E2EE key / FID / service credentials in QR.
 
-### 4.2 Pairing claim endpoint (`ack_server.py`)
-
-`POST /pairing/claim { fid, token | code }`:
-
-- require `Tailscale-User-Login` (existing boundary), fail-closed;
-- validate: session exists, unexpired, unconsumed — constant-time token
-  comparison;
-- **atomic consume-first** (`UPDATE … WHERE consumed = 0`), so concurrent
-  claims cannot double-spend;
-- overwrite of an existing differing FID requires `replace` intent in the
-  session; otherwise a typed `already_paired`-class error — never silently
-  repoint;
-- on success: write `~/.hermes/secrets/ackline-fid` (single line, same
-  strict format `load_fid_file` enforces), then respond `200` with
-  `{ e2ee_key_b64, kid, ack_base_url }`, `Cache-Control: no-store`;
-- failed pairing must not overwrite a working FID;
-- sanitized typed errors only (`expired`, `invalid`, `consumed/replay`,
-  `already_paired`, `rate_limited`); no secret or path leakage;
-- rate-limit claim attempts (brute-force bound for the short-code form).
-
-### 4.3 Key release
-
-- Read the **existing** `hermes-notify.key` into memory, return once in the
-  claim response body over tailnet TLS. No rotation, no new key, no key
-  server. `kid` is echoed so the phone stores under the correct alias.
-- Never log the key; never include it in error paths.
-
-### 4.4 Tests (Hermes unittest harness, alongside existing suites)
-
-- issuance format/entropy shape, hash-only storage;
-- expiry enforcement, single-use consume, consume-race (double claim →
-    exactly one success);
-- invalid/expired/replayed token rejected;
-- replace-intent gating (overwrite without intent fails closed; working
-    FID preserved);
-- `ackline-fid` write format still satisfies `load_fid_file`;
-- key-release-once semantics; no key material in logs/errors.
+No protocol change. No new transport. No key rotation. No registry.
 
 ## 5. Ackline Work
 
-- New `PairingClaimClient` (HTTPS client for `POST /pairing/claim`,
-  mirroring the `HttpsRecoveryRemoteClient` structure: timeouts,
-  no-fallback-to-public-network, sanitized error taxonomy, unit tests with
-  a fake HTTP boundary).
-- Reuse `TailnetHttpsConnectionFactory` — no new network path, no new
-  network permission model.
-- `PayloadKeyStore`: add direct in-memory raw-key import
-  (`importRawKey(bytes, kid)` under the same `KeyProtection`/GCM
-  constraints, zeroing the array after import). The staging-file import
-  path is retained **only as debug/recovery fallback** (operational,
-  superseded as the user path once P2 ships).
-- `FidRePairStore`/manager: baseline the claimed FID and clear
-  `rePairRequired` **only on server-confirmed claim success** — the
-  honor-system "Mark as updated" action is removed in P2B.
-- Do NOT implement QR scanner UI in P2A. No wizard, no camera dependency.
-  P2A is exercisable via debug/CLI-driven claims plus unit tests.
+- First-run onboarding flow (Bienvenido → permission → Tailscale
+  prerequisite → pair → verifying → Todo listo).
+- Notification permission step before final ready state.
+- Tailscale prerequisite guidance; Tailscale-off state explains the
+  prerequisite honestly.
+- QR scan path (scanner implementation choice settled at build time);
+  code-entry fallback if chosen.
+- Calls the existing `PairingProvisioner` — no new provisioning path.
+- Honest progress/error states; success state.
+- Re-pair flow from Ajustes; removes honor-system "Marcar como
+  actualizado".
+- Support diagnostics stay quiet/minimal.
+- No P2C self-test implementation (placeholder/navigation only if needed).
 
 ## 6. Files Likely Touched
-
-Hermes Personal Admin (`~/.hermes/personal-admin`, separate repo):
-
-```text
-ack_server.py                 claim (+ self-test decision, §9.2) handlers
-notification_state.py         pairing-begin / pairing-revoke CLI
-sessions store                NEW — isolated store (see open question §9.1)
-fcm_sender.py                 UNTOUCHED — envelope/build/send reused as-is
-test_recovery_server.py       new claim/security cases
-```
 
 Ackline (this repo, single `app` module):
 
 ```text
-pairing/PairingClaimClient.kt NEW (+ unit tests)
-network/                      reuse only — no changes expected
-security/PayloadKeyStore.kt   add importRawKey; keep staging fallback
-pairing/FidRePairStore.kt     server-confirmed baseline/clear
-                              (+ manager/test updates)
+onboarding/…               NEW — first-run flow, permission step, states
+pairing/…                  UX around existing PairingProvisioner /
+                           PairingClaimClient (no contract change)
+setup/…                    re-pair entry, remove honor-system action
+navigation                 onboarding ↔ inbox/Ajustes wiring
 ```
 
-Explicitly NOT touched: `AlertEntity`/Room schema, `AlertIngestion`
-validation, crypto primitives, notification channels, inbox/detail/setup
-screens (P2B owns UX), scheduler/redelivery logic, launchd/Tailscale wiring.
+Hermes Personal Admin (`~/.hermes/personal-admin`, separate repo):
+
+```text
+pairing initiation tooling  NEW/small — QR and/or code display
+ack_server.py               UNTOUCHED (claim contract frozen)
+sessions store              UNTOUCHED
+fcm_sender.py               UNTOUCHED
+```
+
+Explicitly NOT touched: P2A claim contract, crypto primitives,
+`AlertEntity`/Room schema, `AlertIngestion` validation, scheduler /
+redelivery logic, key rotation, accounts, multi-device, deeper
+diagnostics, new transport.
 
 ## 7. Validation
-
-Hermes: existing unittest suites plus new claim cases — evidence from
-executed tests, not self-report.
 
 Ackline:
 
@@ -175,52 +156,43 @@ Ackline:
 ./gradlew clean kspDebugKotlin lintDebug testDebugUnitTest assembleDebug
 ```
 
-Physical QA (mandatory before P2A PASS): fresh-install claim on the Oppo
-(QR-equivalent token supplied out-of-band until P2B builds the scanner),
-expiry/replay rejection, replace-intent overwrite, Tailscale-OFF claim
-fails closed with sanitized error.
+Physical QA (mandatory before P2B PASS): first-run flow on the Oppo
+without shell/manual docs; permission-before-ready; Tailscale-off
+explanation; QR scan path; code/manual fallback if shipped; re-pair path;
+no secret exposure; no honor-system action; no fake success; large-font /
+accessibility / touch-target review; visual/interaction review on the
+physical Oppo.
 
-Review: independent security review required (token lifecycle,
-constant-time compare, consume-atomicity, key zeroization, rate limits,
-error sanitization) before merge; final ChatGPT + GitHub review per
+Review: product/UX architecture review + security/privacy review around
+QR/token exposure + final ChatGPT + GitHub review per
 `docs/AI_WORKFLOW.md`.
 
-## 8. Bounded Future Dependencies (NOT P2A scope)
+## 8. Bounded Future Dependencies (NOT P2B scope)
 
-- **P2B** consumes the claim contract: QR scanner / code-entry UI, first-run
-  wizard, re-pair flow, removal of the honor-system clear action.
-- **P2C** consumes pairing success: phone-initiated self-test
-  (`POST /pairing/self-test` vs claim-flag orchestration) and the quiet
-  five-row health surface. The self-test storage decision (§9.2) must be
-  settled before P2C implementation but must not block the core claim
-  contract unless required.
+- **P2C** (planned): phone-initiated end-to-end self-test and the quiet
+  five-row health surface (last push, pending ACK count, last ACK sync,
+  last reconciliation, app/build version). Do NOT implement in P2B.
+- **P3**: key rotation/history — still separate, not in P2B.
+- **P5**: deeper diagnostics remain trigger-based, not in P2B.
+- **P8 multi-device**: out of scope.
+- **P9**: FCM remains the production transport; ntfy is NOT a fallback.
 
 ## 9. Open Questions (explicitly unresolved — do not guess)
 
-1. **Pairing-session persistence:** separate tiny SQLite/file vs another
-   safe durable mechanism. Must survive `ack_server.py` launchd restarts
-   during the TTL window without touching the production notifications
-   table.
-2. **Self-test storage semantics (P2C decision):** real committed Hermes
-   run row (truthful redelivery bookkeeping; one `pairing-test-*` history
-   row) vs ephemeral FCM-only test envelope (no DB trace; bypasses
-   `send_transport` bookkeeping). Settle before P2C; do not block the core
-   claim contract on it.
-3. **QR implementation (P2B, not P2A):** ML Kit Barcode Scanning vs ZXing —
+1. **QR scanner implementation:** ML Kit Barcode Scanning vs ZXing —
    pending the owner's Play-services stance on a sideloaded APK.
-4. **ackBaseUrl provisioning:** retain pure build-time config
-   (`local.properties` → `BuildConfig`) vs shipping a stable tailnet
-   default with override. Affects whether a fresh-checkout APK is pairable.
+2. **Short-code fallback:** retain code/manual entry alongside QR, or
+   QR-only. Decide at P2B build time; backend session model supports both.
+3. **Self-test storage semantics (P2C decision):** real committed Hermes
+   run row vs ephemeral FCM-only test envelope. Settle before P2C.
 
 ## 10. Out of Scope / Do Not Do
 
-- QR scanner / wizard / re-pair UX (P2B);
-- self-test orchestration / health surface (P2C);
+- P2C self-test orchestration / health surface (beyond placeholder nav);
 - key rotation, version history, recovery policy (P3);
 - deeper diagnostics beyond the P2C five-row surface (P5);
 - multi-device registry or shared-ACK semantics (P8);
 - accounts, Firebase Auth, Firestore, new SaaS backend;
-- standing token-less registration endpoint;
 - custom cryptographic protocol;
 - Room migration; Hermes notifications-schema migration;
 - ntfy fallback/rollback work — ntfy stays legacy/disabled.
@@ -228,5 +200,5 @@ error sanitization) before merge; final ChatGPT + GitHub review per
 ## 11. Suggested Commit
 
 ```text
-feat: add one-time pairing claim backend and client
+feat: add guided pairing onboarding and re-pair flow
 ```

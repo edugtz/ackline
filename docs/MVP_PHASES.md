@@ -668,6 +668,12 @@ feat: add Hermes redelivery and event-driven recovery
 > readiness evidence but does not count as executing or passing Phase 8.
 > Phase 9 product polish is complete.
 >
+> **CURRENT NOTE:** P2A pairing foundation (Hermes H1 + Ackline A1) has
+> been completed and physically integrated (PASS_WITH_FINDINGS — see
+> `docs/P2A_QA_RESULTS.md`) before Phase 8. Phase 8 remains intentionally
+> deferred until selected post-MVP setup work (P2B/P2C as chosen) is
+> complete.
+>
 > **CURRENT NOTE (post-MVP rebase):** ntfy is legacy/disabled and is not
 > an approved rollback/fallback. The gate evaluates Ackline + FCM
 > readiness for sustained daily use: no normal-use scenario may require

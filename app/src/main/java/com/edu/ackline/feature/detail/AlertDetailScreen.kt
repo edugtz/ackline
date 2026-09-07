@@ -1,7 +1,7 @@
 package com.edu.ackline.feature.detail
 
 import android.app.Application
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,27 +11,36 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.edu.ackline.model.Alert
 import com.edu.ackline.model.AlertLevel
+import com.edu.ackline.ui.SeverityChip
+import com.edu.ackline.ui.severityColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -51,33 +60,14 @@ fun AlertDetailScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(start = 12.dp, end = 24.dp, top = 10.dp, bottom = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onBack) {
-                    Text("Volver")
-                }
-                Text(
-                    text = "Detalle",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        },
+        topBar = { DetailNavBar(onBack = onBack) },
     ) { contentPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(contentPadding)
-                .padding(horizontal = 24.dp, vertical = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+                .padding(horizontal = 16.dp, vertical = 16.dp),
         ) {
             when (val current = uiState) {
                 is DetailUiState.Loading -> {
@@ -87,104 +77,249 @@ fun AlertDetailScreen(
                     Text(
                         text = "Esta alerta ya no está disponible.",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 is DetailUiState.Found -> {
-                    val currentAlert = current.alert
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        SeverityMark(level = currentAlert.level)
-                        Text(
-                            text = severityLabel(currentAlert.level),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = severityColor(currentAlert.level),
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.sp,
-                        )
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            text = if (currentAlert.acknowledgedAt == null) "Pendiente" else "Vista",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Text(
-                        text = currentAlert.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.SemiBold,
+                    AlertDetailContent(
+                        level = current.alert.level,
+                        title = current.alert.title,
+                        message = current.alert.message,
+                        createdAt = current.alert.createdAt,
+                        receivedAt = current.alert.receivedAt,
+                        isPending = current.alert.acknowledgedAt == null,
+                        onAcknowledge = viewModel::acknowledge,
                     )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Text(
-                        text = currentAlert.message,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    DetailTimestamp(label = "Creada", instant = currentAlert.createdAt)
-                    Spacer(modifier = Modifier.height(14.dp))
-                    DetailTimestamp(label = "Recibida", instant = currentAlert.receivedAt)
-
-                    if (currentAlert.acknowledgedAt == null) {
-                        Spacer(modifier = Modifier.height(28.dp))
-                        TextButton(onClick = viewModel::acknowledge) {
-                            Text("Marcar como visto")
-                        }
-                    }
                 }
             }
         }
     }
 }
 
+/**
+ * Intentional navigation band: back affordance on the leading edge,
+ * screen title in the same row, on a surface layer above the screen body.
+ */
 @Composable
-private fun SeverityMark(level: AlertLevel) {
-    Box(
-        modifier = Modifier
-            .size(width = 4.dp, height = 18.dp)
-            .background(severityColor(level)),
-    )
+private fun DetailNavBar(onBack: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Back affordance — compact visuals, but the hit area is
+            // enforced to >= 48dp (accessibility M2 fix).
+            Box(
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = "Volver al inbox",
+                        onClick = onBack,
+                    ),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    ChevronLeft(
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Atrás",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "Detalle de alerta",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(end = 16.dp),
+            )
+        }
+    }
 }
 
 @Composable
-private fun DetailTimestamp(label: String, instant: Instant) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = formatDetailTime(instant),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onBackground,
+private fun ChevronLeft(color: Color) {
+    androidx.compose.foundation.Canvas(
+        modifier = Modifier
+            .height(18.dp)
+            .width(18.dp),
+    ) {
+        val path = Path().apply {
+            moveTo(size.width * 0.62f, size.height * 0.18f)
+            lineTo(size.width * 0.30f, size.height * 0.50f)
+            lineTo(size.width * 0.62f, size.height * 0.82f)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = Stroke(width = size.minDimension * 0.09f, cap = StrokeCap.Round),
         )
     }
 }
 
 @Composable
-private fun severityColor(level: AlertLevel) = when (level) {
-    AlertLevel.REMEMBER -> MaterialTheme.colorScheme.outline
-    AlertLevel.IMPORTANT -> MaterialTheme.colorScheme.primary
-    AlertLevel.URGENT -> MaterialTheme.colorScheme.error
+private fun AlertDetailContent(
+    level: AlertLevel,
+    title: String,
+    message: String,
+    createdAt: Instant,
+    receivedAt: Instant,
+    isPending: Boolean,
+    onAcknowledge: () -> Unit,
+) {
+    // Main alert panel — alert content dominates; metadata stays quiet.
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 18.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SeverityChip(level = level)
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = if (isPending) "Pendiente" else "Vista",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = (-0.2).sp,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            // Severity-toned divider: restrained identity accent for the
+            // primary panel without saturating the screen in teal.
+            HorizontalDivider(
+                color = lerp(
+                    MaterialTheme.colorScheme.outlineVariant,
+                    severityColor(level),
+                    0.55f,
+                ),
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                lineHeight = 26.sp,
+            )
+
+            Spacer(modifier = Modifier.height(22.dp))
+
+            // Secondary metadata area — recessed inset, clearly quieter.
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    DetailTimestamp(
+                        label = "Creada",
+                        instant = createdAt,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DetailTimestamp(
+                        label = "Recibida",
+                        instant = receivedAt,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+
+    // ACK action area — pending cards only; local ACK + eventual remote ACK
+    // semantics are unchanged (callback wiring identical to previous version).
+    if (isPending) {
+        Spacer(modifier = Modifier.height(18.dp))
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    role = Role.Button,
+                    onClick = onAcknowledge,
+                ),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ) {
+            Text(
+                text = "Marcar como vista",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 15.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+        }
+    } else {
+        Spacer(modifier = Modifier.height(18.dp))
+        Text(
+            text = "Alerta vista",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+    }
 }
 
-private fun severityLabel(level: AlertLevel) = when (level) {
-    AlertLevel.REMEMBER -> "RECORDATORIO"
-    AlertLevel.IMPORTANT -> "IMPORTANTE"
-    AlertLevel.URGENT -> "URGENTE"
+@Composable
+private fun DetailTimestamp(
+    label: String,
+    instant: Instant,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = formatDetailTime(instant),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 private val detailTimeFormatter = DateTimeFormatter.ofPattern(

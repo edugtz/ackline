@@ -1,40 +1,34 @@
 package com.edu.ackline.feature.inbox
 
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +37,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.edu.ackline.model.Alert
 import com.edu.ackline.model.AlertLevel
+import com.edu.ackline.ui.SegmentedFilter
+import com.edu.ackline.ui.SegmentedOption
+import com.edu.ackline.ui.SeverityChip
+import com.edu.ackline.ui.SeverityEmphasis
 import java.time.Instant
 import java.time.ZoneId
 
@@ -63,52 +61,46 @@ fun InboxScreen(
         topBar = {
             InboxHeader(
                 pendingCount = uiState.pendingAlerts.size,
+                viewedCount = uiState.viewedAlerts.size,
+                selectedFilter = uiState.filter,
+                onFilterSelected = viewModel::selectFilter,
                 onSetupClick = onSetupClick,
             )
         },
     ) { contentPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding),
-        ) {
-            InboxFilterBar(
-                selectedFilter = uiState.filter,
-                pendingCount = uiState.pendingAlerts.size,
-                viewedCount = uiState.viewedAlerts.size,
-                onFilterSelected = viewModel::selectFilter,
+        if (uiState.visibleAlerts.isEmpty()) {
+            EmptyInbox(
+                filter = uiState.filter,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding),
             )
-
-            if (uiState.visibleAlerts.isEmpty()) {
-                EmptyInbox(
-                    filter = uiState.filter,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 4.dp,
-                        bottom = 16.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(
-                        items = uiState.visibleAlerts,
-                        key = { it.notificationId },
-                    ) { alert ->
-                        AlertCard(
-                            alert = alert,
-                            now = now,
-                            zoneId = zoneId,
-                            onClick = { onAlertClick(alert.notificationId) },
-                            onAcknowledge = {
-                                viewModel.acknowledge(alert.notificationId)
-                            },
-                        )
-                    }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding),
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 14.dp,
+                    bottom = 24.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(
+                    items = uiState.visibleAlerts,
+                    key = { it.notificationId },
+                ) { alert ->
+                    AlertCard(
+                        alert = alert,
+                        now = now,
+                        zoneId = zoneId,
+                        onClick = { onAlertClick(alert.notificationId) },
+                        onAcknowledge = {
+                            viewModel.acknowledge(alert.notificationId)
+                        },
+                    )
                 }
             }
         }
@@ -118,98 +110,97 @@ fun InboxScreen(
 @Composable
 private fun InboxHeader(
     pendingCount: Int,
+    viewedCount: Int,
+    selectedFilter: InboxFilter,
+    onFilterSelected: (InboxFilter) -> Unit,
     onSetupClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(start = 20.dp, end = 12.dp, top = 10.dp, bottom = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // Layered header band: sits visibly above the screen background and
+    // carries the title hierarchy + the segmented filter as one composed unit.
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "PERSONAL ADMIN",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.84f),
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.2.sp,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "Mis alertas",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = pendingCountLabel(pendingCount),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        TextButton(
-            onClick = onSetupClick,
-            contentPadding = PaddingValues(horizontal = 8.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(start = 20.dp, end = 14.dp, top = 12.dp, bottom = 14.dp),
         ) {
-            Text("Ajustes")
-        }
-    }
-}
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "PERSONAL ADMIN",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.4.sp,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Mis alertas",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.2).sp,
+                    )
+                    Text(
+                        text = pendingCountLabel(pendingCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // Compact outlined "Ajustes" pill. The visual stays small;
+                // minimumInteractiveComponentSize guarantees a >= 48dp
+                // effective touch target (accessibility M2 fix).
+                Box(
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .clickable(
+                            onClickLabel = "Abrir configuración",
+                            role = Role.Button,
+                            onClick = onSetupClick,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color.Transparent,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant,
+                        ),
+                    ) {
+                        Text(
+                            text = "Ajustes",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(
+                                horizontal = 16.dp,
+                                vertical = 7.dp,
+                            ),
+                        )
+                    }
+                }
+            }
 
-@Composable
-private fun InboxFilterBar(
-    selectedFilter: InboxFilter,
-    pendingCount: Int,
-    viewedCount: Int,
-    onFilterSelected: (InboxFilter) -> Unit,
-) {
-    PrimaryTabRow(
-        selectedTabIndex = if (selectedFilter == InboxFilter.PENDING) 0 else 1,
-        modifier = Modifier.padding(horizontal = 12.dp),
-        containerColor = Color.Transparent,
-        contentColor = MaterialTheme.colorScheme.primary,
-    ) {
-        Tab(
-            selected = selectedFilter == InboxFilter.PENDING,
-            onClick = { onFilterSelected(InboxFilter.PENDING) },
-            text = {
-                Text(
-                    text = pendingTabLabel(pendingCount),
-                    color = if (selectedFilter == InboxFilter.PENDING) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    fontWeight = if (selectedFilter == InboxFilter.PENDING) {
-                        FontWeight.SemiBold
-                    } else {
-                        FontWeight.Medium
-                    },
-                    letterSpacing = 0.2.sp,
-                )
-            },
-        )
-        Tab(
-            selected = selectedFilter == InboxFilter.VIEWED,
-            onClick = { onFilterSelected(InboxFilter.VIEWED) },
-            text = {
-                Text(
-                    text = viewedTabLabel(viewedCount),
-                    color = if (selectedFilter == InboxFilter.VIEWED) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    fontWeight = if (selectedFilter == InboxFilter.VIEWED) {
-                        FontWeight.SemiBold
-                    } else {
-                        FontWeight.Medium
-                    },
-                    letterSpacing = 0.2.sp,
-                )
-            },
-        )
+            Spacer(modifier = Modifier.height(14.dp))
+
+            SegmentedFilter(
+                options = listOf(
+                    SegmentedOption(label = pendingTabLabel(pendingCount)),
+                    SegmentedOption(label = viewedTabLabel(viewedCount)),
+                ),
+                selectedIndex = if (selectedFilter == InboxFilter.PENDING) 0 else 1,
+                onOptionSelected = { index ->
+                    onFilterSelected(
+                        if (index == 0) InboxFilter.PENDING else InboxFilter.VIEWED,
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -222,31 +213,22 @@ private fun AlertCard(
     onAcknowledge: () -> Unit,
 ) {
     val isPending = alert.acknowledgedAt == null
-    val containerColor = if (isPending) {
-        MaterialTheme.colorScheme.surfaceContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerLow
-    }
-    val titleColor = if (isPending) {
-        MaterialTheme.colorScheme.onBackground
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val messageColor = if (isPending) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-    }
+    val emphasis = if (isPending) SeverityEmphasis.Full else SeverityEmphasis.Muted
 
+    // Pending cards are visibly raised over viewed/quiet cards.
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        color = containerColor,
+        shape = RoundedCornerShape(18.dp),
+        color = if (isPending) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
         ) {
             Column(
                 modifier = Modifier
@@ -257,9 +239,9 @@ private fun AlertCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    SeverityBadge(
+                    SeverityChip(
                         level = alert.level,
-                        isPending = isPending,
+                        emphasis = emphasis,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
@@ -268,32 +250,32 @@ private fun AlertCard(
                             now = now,
                             zoneId = zoneId,
                         ),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
 
-                Spacer(modifier = Modifier.height(9.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
                     text = alert.title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = titleColor,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = if (isPending) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = alert.message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = messageColor,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -301,16 +283,16 @@ private fun AlertCard(
             ) {
                 Text(
                     text = formatInboxDateTime(alert.createdAt, zoneId),
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.outline,
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 if (isPending) {
-                    AcknowledgeAction(onClick = onAcknowledge)
+                    VistoPill(onClick = onAcknowledge)
                 } else {
                     Text(
                         text = "Vista",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
@@ -321,123 +303,42 @@ private fun AlertCard(
     }
 }
 
+/**
+ * Compact acknowledgment pill — the card-level "Visto" action.
+ * Same callback semantics as before; only the visual weight changed.
+ * Visual geometry stays compact while the hit area is enforced to
+ * >= 48dp via minimumInteractiveComponentSize.
+ */
 @Composable
-private fun AcknowledgeAction(
+private fun VistoPill(
     onClick: () -> Unit,
 ) {
-    FilledTonalButton(
-        onClick = onClick,
-        modifier = Modifier.defaultMinSize(minHeight = 36.dp),
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(
-                alpha = 0.85f,
+    Box(
+        modifier = Modifier
+            .minimumInteractiveComponentSize()
+            .semantics {
+                contentDescription = "Marcar esta alerta como vista"
+            }
+            .clickable(
+                onClickLabel = "Marcar como vista",
+                role = Role.Button,
+                onClick = onClick,
             ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        CheckGlyph(
-            color = LocalContentColor.current,
-            modifier = Modifier.size(14.dp),
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            text = "Marcar vista",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun CheckGlyph(
-    color: Color,
-    modifier: Modifier = Modifier,
-) {
-    Canvas(modifier = modifier) {
-        val strokeWidth = size.minDimension * 0.14f
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.18f, size.height * 0.55f),
-            end = Offset(size.width * 0.40f, size.height * 0.76f),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round,
-        )
-        drawLine(
-            color = color,
-            start = Offset(size.width * 0.40f, size.height * 0.76f),
-            end = Offset(size.width * 0.84f, size.height * 0.26f),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round,
-        )
-    }
-}
-
-@Composable
-private fun SeverityBadge(
-    level: AlertLevel,
-    isPending: Boolean,
-) {
-    Surface(
-        color = severityContainerColor(level, isPending),
-        contentColor = severityColor(level, isPending),
-        shape = RoundedCornerShape(7.dp),
-    ) {
-        Text(
-            text = severityLabel(level),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.3.sp,
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun severityColor(
-    level: AlertLevel,
-    isPending: Boolean,
-): Color {
-    val alpha = if (isPending) 1f else 0.72f
-    return when (level) {
-        AlertLevel.REMEMBER -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)
-        AlertLevel.IMPORTANT -> MaterialTheme.colorScheme.primary.copy(alpha = alpha)
-        AlertLevel.URGENT -> MaterialTheme.colorScheme.error.copy(alpha = alpha)
-    }
-}
-
-@Composable
-private fun severityContainerColor(
-    level: AlertLevel,
-    isPending: Boolean,
-): Color {
-    val alpha = if (isPending) {
-        when (level) {
-            AlertLevel.REMEMBER -> 0.72f
-            AlertLevel.IMPORTANT -> 0.13f
-            AlertLevel.URGENT -> 0.12f
-        }
-    } else {
-        when (level) {
-            AlertLevel.REMEMBER -> 0.4f
-            AlertLevel.IMPORTANT -> 0.07f
-            AlertLevel.URGENT -> 0.06f
+        ) {
+            Text(
+                text = "Visto",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
+            )
         }
     }
-
-    return when (level) {
-        AlertLevel.REMEMBER -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = alpha)
-        AlertLevel.IMPORTANT -> MaterialTheme.colorScheme.primary.copy(alpha = alpha)
-        AlertLevel.URGENT -> MaterialTheme.colorScheme.error.copy(alpha = alpha)
-    }
-}
-
-private fun severityLabel(level: AlertLevel) = when (level) {
-    AlertLevel.REMEMBER -> "Recordatorio"
-    AlertLevel.IMPORTANT -> "Importante"
-    AlertLevel.URGENT -> "Urgente"
 }
 
 @Composable
@@ -448,7 +349,7 @@ private fun EmptyInbox(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 40.dp),
+            .padding(horizontal = 32.dp, vertical = 48.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -459,14 +360,14 @@ private fun EmptyInbox(
                 "Aún no hay alertas vistas"
             },
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = if (filter == InboxFilter.PENDING) {
                 "Las alertas nuevas aparecerán aquí."
             } else {
-                "Las alertas pendientes aparecerán aquí hasta que las marques como vistas."
+                "Las alertas aparecerán aquí hasta que las marques como vistas."
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

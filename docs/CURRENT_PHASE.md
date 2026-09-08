@@ -8,14 +8,16 @@
 **PHASE 8 DEFERRED — FINAL REAL-WORLD USAGE / RELIABILITY GATE (not PASS)**
 **POST-MVP P2 — CURRENT ACTIVE AREA (Better Pairing / Guided Setup)**
 **P2A — COMPLETE (PASS_WITH_FINDINGS — see docs/P2A_QA_RESULTS.md)**
-**P2B — CURRENT ACTIVE SLICE (Guided Pairing / Onboarding / Re-pair UX)**
+**P2B IMPLEMENTATION — COMPLETE (H1 + A1 + A2 landed)**
+**P2B-QA — CURRENT ACTIVE GATE (mandatory physical product gate; partial evidence only, NOT PASS)**
 **P2C — PLANNED**
 
 Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
-Ackline branch: `p2b-planning` — HEAD `39cfa5e8a9b09a49ab5ba3e5069c90424fde1f43` (`docs: address P2B planning review findings`)
+Ackline docs branch: `docs-p2b-qa-ntfy-roadmap` (docs-only alignment; no source changes).
 
-Hermes Personal Admin branch: `dev` — HEAD `b95129f71f110854910b23d165faf311a5ce8786` (`feat: add secure Ackline pairing claim protocol`)
+Ackline/Hermes base: clean `dev` — `4012532a8e146e9d2a3d82d7a6e9785885abbba7`
+(`fix: add scanner accessibility semantics`).
 
 Phase 7 blockers: **0**
 
@@ -35,15 +37,15 @@ Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICA
 Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout recorded by this documentation change
 ```
 
-Current change: **P2A implementation COMPLETE; P2A docs closeout recorded by this change.**
+Current change: **docs-only canonical alignment (P2B-QA status + ntfy roadmap decision). No source changes.**
 
-Next actual step: **P2B — Guided Pairing / Onboarding / Re-pair UX**
-(see `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`;
-`docs/IMPLEMENTATION_PLAN.md` is the concise active-plan index). P2A backend/protocol and Android
-provisioning foundation are now implemented and physically integrated
-(Hermes H1 + Ackline A1, `docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS).
-P2B is now the active product-facing slice. P2C (self-test + minimal
-health) remains planned, not active.
+Current gate: **P2B-QA — mandatory physical product gate**
+(see `docs/P2B_PLAN.md` P2B-QA section and `docs/P2B_TASKS.md` PHYSICAL QA).
+P2B implementation (Hermes H1 + Ackline A1 + Ackline A2: real CameraX +
+ZXing QR scanner, CAMERA permission flow, production scanner-fed pairing,
+guided onboarding, server-confirmed re-pair, honor-system "Marcar como
+actualizado" removed) is landed. P2B itself is NOT complete until QA
+passes. P2C (self-test + minimal health) remains planned, not active.
 
 Phase 8 — multi-day real-world Oppo usage/reliability gate — is
 **DEFERRED** until Ackline has completed the selected post-MVP
@@ -63,15 +65,104 @@ roadmap context is in `docs/POST_MVP_PHASES.md`.
 
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented + physically integrated (PASS_WITH_FINDINGS)
-P2B  guided onboarding + re-pair  CURRENT — authorized to implement (owns QR scanner UI)
+P2B  guided onboarding + re-pair  IMPLEMENTATION COMPLETE (H1 + A1 + A2 landed) — P2B-QA ACTIVE GATE
 P2C  self-test + minimal health   PLANNED — not active
 ```
 
-Manual setup paths are now legacy/debug fallback, not the normal user path:
-adb E2EE staging, manual FID copy into `~/.hermes/secrets/ackline-fid`,
-and the honor-system "Mark as updated" action (scheduled for P2B removal).
-Normal setup is intended to use guided P2 pairing (P2B builds the UX on the
-implemented P2A protocol).
+Manual setup paths are legacy/debug fallback, not the normal user path:
+adb E2EE staging and manual FID copy into `~/.hermes/secrets/ackline-fid`.
+The honor-system "Mark as updated" action is REMOVED (P2B-A2); re-pair
+goes through the same QR scanner with server confirmation. Normal setup
+uses guided P2 pairing (P2B UX landed on the implemented P2A protocol).
+Phase 9 visual identity is retained.
+
+---
+
+## P2B-QA — Current Active Gate (PARTIAL EVIDENCE — NOT PASS)
+
+P2B implementation is COMPLETE = H1 (Hermes QR operator tooling) + A1
+(onboarding/durable pairing foundation) + A2 (real QR scanner + re-pair +
+hardening) landed. **P2B itself is NOT COMPLETE** — P2B-QA is the
+mandatory physical product gate and has NOT passed.
+
+Physically proven so far (partial/current evidence only):
+
+```text
+real scanner                 PASS
+fresh QR transport           PASS
+replace_required mapping     PASS
+replacement QR               PASS
+server-confirmed replacement PASS
+Listo -> Inbox               PASS
+```
+
+Concretely: a real Hermes terminal QR scanned on the physical Oppo; a
+fresh pairing QR against a different registered installation produced the
+expected `replace_required` flow with the approved replacement-QR UX (no
+FID, Firebase terminology, CLI syntax, secret paths, token, or session
+data exposed); a real `pairing-begin --qr --replace` replacement QR was
+scanned; replacement pairing completed; Ackline reached "Listo"; the user
+entered the normal Personal Admin Inbox afterward.
+
+Still pending before P2B closeout (at least):
+
+```text
+real encrypted FCM canary after pairing
+physical native notification presentation with POST_NOTIFICATIONS granted
+Room exactly-once confirmation
+Visto/local ACK -> Hermes remote acknowledged state
+remaining camera lifecycle / permission / ColorOS behavior checks
+light/dark/large-font/accessibility sanity per the P2B-QA plan
+```
+
+Do NOT claim P2B full QA PASS, P2B COMPLETE, or native post-pairing FCM
+notification proven. Do not expand QA scope beyond the approved plan
+(`docs/P2B_PLAN.md` P2B-QA, `docs/P2B_TASKS.md` PHYSICAL QA).
+
+---
+
+## Canonical Transport Decision — FCM Only / ntfy Rejected (CURRENT)
+
+```text
+Realtime:  Hermes Personal Admin -> encrypted FCM -> Ackline
+ACK:       Ackline -> Tailnet HTTPS -> Hermes Personal Admin
+Recovery:  bounded FCM redelivery + event-driven Tailnet HTTPS reconciliation
+```
+
+Ackline + FCM is the sole supported production notification path. ntfy is
+architecturally REJECTED and UNSUPPORTED: not a fallback, not a rollback
+option, not an alternate production transport, not roadmap. Rationale:
+real-world use outside the home previously showed ntfy was not reliable
+enough for these notification requirements.
+
+Historical record stays historical: ntfy existed before the FCM cutover
+(Phase 6/7 history, P2A evidence) — do not rewrite past facts. Production
+Hermes still contains some legacy ntfy code at this moment; its removal is
+PENDING as a dedicated Hermes cleanup change after P2B QA closeout. Do NOT
+claim ntfy implementation is already deleted.
+
+No fallback is implemented or preselected now. Ackline/FCM must first be
+evaluated through real-world use (Phase 8). Only if Phase 8-or-later
+evidence demonstrates unacceptable Ackline/FCM reliability does the
+project open an alternative-transport investigation; candidates at that
+time MAY include Pushover, Telegram Bot, or another evidence-backed
+option — candidates, not selections. P9 is reframed accordingly
+(see `docs/POST_MVP_PHASES.md`): TRIGGER ONLY / NOT ACTIVE; the preferred
+outcome is that P9 is never needed.
+
+Canonical near-term order:
+
+```text
+1. P2B-QA — finish physical product gate (CURRENT)
+2. P2B closeout
+3. Hermes Personal Admin cleanup — remove remaining ntfy legacy code
+4. P2C — self-test + minimal health
+5. Phase 8 — multi-day real-world Ackline/FCM reliability gate
+6. Only if reliability evidence is inadequate: evaluate alternatives
+```
+
+P1, P3, P4, P5-deep, P6, P7, P8 multi-device, and fallback transport work
+are NOT active.
 
 ---
 
@@ -80,7 +171,8 @@ implemented P2A protocol).
 Phase 6 — Hermes Outbox / FCM Sender Integration was fully implemented,
 validated against real Firebase and the physical Oppo, and cut over to
 production. `ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`; ntfy
-is legacy/disabled state pending later cleanup/removal.
+is architecturally rejected/unsupported — remaining Hermes legacy code
+removal is a dedicated cleanup after P2B QA closeout.
 
 Hermes final merge:
 
@@ -147,7 +239,8 @@ No periodic Android recovery.
 No delivery receipt protocol.
 No Hermes DB migration.
 No Room migration.
-ntfy is NOT an approved fallback path — Phase 8 tests Ackline/FCM alone.
+ntfy is architecturally rejected/unsupported — not a fallback or rollback
+path; Phase 8 tests Ackline/FCM alone.
 ```
 
 ### Long-offline model (implemented)
@@ -565,13 +658,14 @@ When eventually executed, Phase 8 still validates:
   Ackline/FCM or evaluate another alternative — ntfy is not an approved
   fallback.
 
-ntfy remains legacy/disabled and is not a fallback.
+ntfy is architecturally rejected/unsupported and is not a fallback;
+remaining Hermes legacy ntfy code removal is a dedicated post-QA cleanup.
 
 ---
 
 ## Phase 7 Constraints Still in Force (retained)
 
-- ntfy is legacy/disabled — not a fallback; Phase 8 validates Ackline/FCM alone;
+- ntfy is architecturally rejected/unsupported — not a fallback; Phase 8 validates Ackline/FCM alone;
 - no constant/aggressive polling;
 - no periodic WorkManager as a recovery path;
 - no generic bidirectional sync engine;
@@ -610,16 +704,19 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Implement **P2B — Guided Pairing / Onboarding / Re-pair UX** per
-   `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`.
-   P2A (Hermes H1 + Ackline A1) is complete
-   and physically integrated (`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS;
-   native notification display NOT PROVEN in that run because
-   `POST_NOTIFICATIONS` was denied at delivery time — P2B places permission
-   onboarding before pairing/readiness).
+1. Finish **P2B-QA — the mandatory physical product gate** per
+   `docs/P2B_PLAN.md` (P2B-QA) and `docs/P2B_TASKS.md` (PHYSICAL QA).
+   P2B implementation (H1 + A1 + A2) is landed. Partial evidence so far:
+   real scanner PASS, fresh-QR transport PASS, `replace_required` mapping
+   PASS, replacement QR PASS, server-confirmed replacement PASS,
+   Listo → Inbox PASS. Still pending: real encrypted FCM canary after
+   pairing, native notification with `POST_NOTIFICATIONS` granted, Room
+   exactly-once, Visto → Hermes remote-acknowledged, remaining camera /
+   permission / ColorOS checks, light/dark/large-font/accessibility sanity.
+   Do NOT mark P2B COMPLETE until QA passes.
 2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
    executed after the selected post-MVP setup work (P2) is complete and
    Ackline can be used normally; Ackline/FCM is the sole transport under
-   test — no ntfy fallback.
+   test — ntfy is rejected, not a fallback.
 3. `ack_server.py` lifecycle/supervision is resolved (see Operational
    Follow-Up above).

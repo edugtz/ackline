@@ -38,7 +38,7 @@ SPEC §11 P2C boundary     → enforced at every review
       review is accepted and the planning commit exists.
       No production code merely because this package exists.
 
-## H1 — Hermes QR operator tooling (personal-admin branch off `dev`)
+## H1 — Hermes QR operator tooling (personal-admin branch off `dev`) — COMPLETE
 
 - [ ] Inspect direct runtime imports/dependencies; create the smallest
       deliberate `requirements.txt` + pinned `segno` (no Pillow, no vendoring).
@@ -71,7 +71,7 @@ SPEC §11 P2C boundary     → enforced at every review
       `fcm_sender.py` diff; no protocol change; token hygiene holds.
 - [ ] ChatGPT + GitHub verdict recorded (`PASS` required).
 
-## A1 — Android onboarding state / UI (Ackline branch off `dev`, no camera)
+## A1 — Android onboarding state / UI (Ackline branch off `dev`, no camera) — COMPLETE
 
 - [ ] **A1 PRE-EDIT DECISION GATE:** inspect durable P2A state ownership;
       document exact bounded one-time app-private confirmation bootstrap
@@ -128,7 +128,7 @@ SPEC §11 P2C boundary     → enforced at every review
       ordering, §5 strictness, §7 completeness) and P2C exclusion.
 - [ ] ChatGPT + GitHub verdict recorded (`PASS` required).
 
-## A2 — Scanner / re-pair / hardening (Ackline branch off `dev`)
+## A2 — Scanner / re-pair / hardening (Ackline branch off `dev`) — COMPLETE (implementation landed; PASS requires P2B-QA below)
 
 - [ ] Deps: CameraX (core/camera2/lifecycle/view) + `zxing-core` in
       `gradle/libs.versions.toml` + `app/build.gradle.kts`; versions
@@ -161,7 +161,18 @@ SPEC §11 P2C boundary     → enforced at every review
       no Room/DB migration (A1 private-state bootstrap remains required), no contract drift, redaction asserts green.
 - [ ] Logcat pre-screen: no token/FID/key in normal logs.
 
-## PHYSICAL QA — Oppo product gate (blocks A2 PASS and P2B COMPLETE)
+## PHYSICAL QA — Oppo product gate (blocks A2 PASS and P2B COMPLETE) — ACTIVE (partial evidence, NOT PASS)
+
+Proven so far (partial/current evidence only):
+
+- [x] real Hermes terminal QR scanned on physical Oppo
+- [x] fresh pairing QR against a different registered installation → expected `replace_required` flow
+- [x] approved replacement-QR UX (no FID, Firebase terminology, CLI syntax, secret paths, token, or session data)
+- [x] real `pairing-begin --qr --replace` replacement QR scanned
+- [x] replacement pairing completed; Ackline reached "Listo"
+- [x] user entered the normal Personal Admin Inbox afterward
+
+Still pending — checklist below remains normative (unchecked items are open):
 
 - [ ] First install: onboarding route; permission grant AND denial
       runs; successful pairing after denial enters Inbox with incomplete status
@@ -189,8 +200,9 @@ SPEC §11 P2C boundary     → enforced at every review
 
 ## DOCS CLOSEOUT
 
-- [ ] Update `docs/CURRENT_PHASE.md` (P2B PASS + evidence pointer) only
-      to reflect landed behavior; no architecture churn.
+- [ ] Update `docs/CURRENT_PHASE.md` (P2B-QA active-gate status + partial
+      evidence now; P2B PASS + full evidence pointer only after QA completes)
+      only to reflect landed behavior; no architecture churn.
 - [ ] Record QA evidence pointer (`docs/P2B_QA_RESULTS.md` only if the
       project convention from P2A applies; otherwise inline in phase
       closeout).

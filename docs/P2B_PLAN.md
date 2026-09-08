@@ -2,7 +2,8 @@
 
 ## Status
 
-**ACTIVE BUILD PLAN — P2B.** Implements `docs/P2B_SPEC.md` on the frozen
+**BUILD PLAN — P2B (implementation COMPLETE; P2B-QA gate ACTIVE).**
+Implements `docs/P2B_SPEC.md` on the frozen
 P2A contract (Hermes H1 + Ackline A1, `docs/P2A_QA_RESULTS.md`).
 Execution checklist: `docs/P2B_TASKS.md`.
 
@@ -13,12 +14,12 @@ P2B-A2  Scanner / re-pair / hardening   (+ CameraX/ZXing deps)
 P2B-QA  Physical Oppo product gate      (mandatory before PASS)
 ```
 
-Gates: **Accepted planning review and the user-owned planning commit block
-all production implementation until complete (TASKS, immediately after PRECHECK).
-H1 merges before Android QR physical integration. A1 merges
-before the A2 branch. A2 cannot PASS without physical Oppo QA. P2B
-cannot COMPLETE with native notification still unproven after permission
-is granted.**
+Status: **H1 COMPLETE. A1 COMPLETE. A2 COMPLETE. P2B-QA ACTIVE (partial
+physical evidence only — NOT PASS).** (The planning-review gate,
+H1-before-integration, and A1-before-A2 sequencing below are landed
+history, retained for the record.) A2 cannot PASS without physical Oppo
+QA. P2B cannot COMPLETE with native notification still unproven after
+permission is granted.**
 
 P2A is not redesigned. No protocol, crypto, Room, or Hermes-DB change.
 Expected DB migration: **none**.
@@ -280,7 +281,21 @@ Physical Oppo QA mandatory (see P2B-QA).
 
 ---
 
-## P2B-QA — Product Gate (Mandatory)
+## P2B-QA — Product Gate (Mandatory) — ACTIVE (partial evidence, NOT PASS)
+
+Proven so far (partial/current evidence only): real scanner PASS;
+fresh-QR transport PASS; `replace_required` mapping PASS (approved
+replacement-QR UX — no FID, Firebase terminology, CLI syntax, secret
+paths, token, or session data exposed); replacement QR PASS;
+server-confirmed replacement PASS; Listo → Inbox PASS.
+
+Still pending: real encrypted FCM canary after pairing; native
+notification with `POST_NOTIFICATIONS` granted; Room exactly-once;
+Visto → Hermes remote-acknowledged; remaining camera lifecycle /
+permission / ColorOS checks; light/dark/large-font/accessibility sanity
+per the approved plan. P2B is NOT COMPLETE until this gate passes.
+
+Full matrix (normative — unchecked items remain open):
 
 First install: routes to onboarding; permission grant; permission denial
 (pairing succeeds → Inbox allowed, incomplete status + Ajustes CTA, never

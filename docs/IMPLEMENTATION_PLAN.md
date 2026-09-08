@@ -2,14 +2,14 @@
 
 ## Status
 
-**ACTIVE PLAN — P2B.**
+**ACTIVE PLAN — P2B-QA (P2B implementation complete; QA gate active).**
 
 Area: `Post-MVP P2 — Better Pairing / Guided Setup`
 Slice: `P2B — guided onboarding + re-pair UX`
 
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented and physically integrated
-P2B  guided onboarding + re-pair  CURRENT
+P2B  guided onboarding + re-pair  IMPLEMENTATION COMPLETE (H1 + A1 + A2 landed) — P2B-QA ACTIVE GATE
 P2C  self-test + minimal health   PLANNED — not active
 ```
 
@@ -61,9 +61,8 @@ primitives, Room schema, Hermes notification schema, ACK/recovery behavior,
 or transport architecture.
 
 Implementation order and exact file/test scopes remain in `docs/P2B_PLAN.md`
-and `docs/P2B_TASKS.md`. The intended gates are H1 operator tooling, A1
-Android onboarding state and UI, A2 scanner/re-pair hardening, then the
-physical Oppo product gate.
+and `docs/P2B_TASKS.md`. H1, A1, and A2 are landed; the remaining gate is the physical Oppo
+product gate (P2B-QA, partial evidence only — NOT PASS).
 
 ## Validation
 

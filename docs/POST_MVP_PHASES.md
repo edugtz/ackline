@@ -114,17 +114,23 @@ copy are now legacy/debug fallback, not the normal path.
   `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`;
   `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
-### P2B — Guided onboarding + re-pair (CURRENT ACTIVE)
+### P2B — Guided onboarding + re-pair (IMPLEMENTATION COMPLETE — P2B-QA ACTIVE GATE)
 
-Expected scope: guided first-run setup (Bienvenido → permission →
+Landed scope: guided first-run setup (Bienvenido → permission →
 Tailscale prerequisite → scan QR → pair/provision → readiness → Inbox),
 QR-only pairing UX on the frozen P2A contract, notification permission
-before final ready state, Tailscale-off explanation, re-pair flow replacing the manual
-"Mark as updated" honor-system action, quiet/minimal diagnostics, no
-secret exposure. Removes the manual FID workflow from normal UX;
-operator-friendly pairing initiation on the Hermes side. No P2C self-test
-beyond placeholder/navigation; no key rotation (P3); no deeper
-diagnostics (P5); no multi-device (P8).
+before final ready state, Tailscale-off explanation, re-pair flow through
+the same QR scanner (manual "Mark as updated" honor-system action
+REMOVED), quiet/minimal diagnostics, no secret exposure. The manual FID
+workflow is out of normal UX; operator-friendly pairing initiation on the
+Hermes side. No P2C self-test beyond placeholder/navigation; no key
+rotation (P3); no deeper diagnostics (P5); no multi-device (P8).
+
+P2B itself is NOT COMPLETE: P2B-QA is the mandatory physical product
+gate (partial evidence only — real scanner, fresh-QR transport,
+`replace_required` mapping, replacement QR, server-confirmed replacement,
+and Listo → Inbox proven; encrypted FCM canary, native notification, Room
+exactly-once, and Visto → remote ACK still pending).
 
 - first-run wizard (Bienvenido → permission → scan QR → pair/provision → readiness);
 - JSON v1 QR-only in P2B v1; short code is deferred to optional P2B.1;
@@ -285,15 +291,27 @@ Do not prematurely add this complexity.
 
 ---
 
-## P9 — Alternative Push Transport
+## P9 — Reliability Fallback / Alternative Transport
+
+> **STATUS: TRIGGER ONLY / NOT ACTIVE.** Do not design or implement now.
+> The preferred outcome is that P9 is never needed.
 
 ### Trigger
 
-Only if FCM becomes unsuitable because of platform, cost, privacy, device ecosystem, or product requirements.
+Only real-world evidence showing unacceptable Ackline/FCM reliability
+after reasonable attempts to fix Ackline/FCM (Phase 8 or later). The
+sequence is: observed reliability problem → investigate alternatives with
+current evidence → select one only if justified.
 
-The core app must remain transport-isolated so this is a bounded migration.
+Candidate options at evaluation time may include Pushover, Telegram Bot,
+or another evidence-backed service available at that future time. These
+are candidates, not selected solutions. Do not promise Pushover or
+Telegram. Do not maintain two transports proactively.
 
-Do not maintain two push transports proactively.
+The core app must remain transport-isolated so a future migration, if
+ever triggered, stays bounded.
 
-> **CURRENT:** FCM remains the production transport. ntfy is
-> legacy/disabled and is not an approved fallback or rollback path.
+> **CURRENT:** Ackline + FCM is the sole supported production
+> notification path. ntfy is architecturally rejected/unsupported — not a
+> fallback, rollback, or roadmap item; remaining Hermes legacy ntfy code
+> removal is a dedicated cleanup after P2B QA closeout.

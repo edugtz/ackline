@@ -8,7 +8,8 @@ Hermes remains the Personal Admin brain and server-side notification source of t
 
 Phase 6 changed **only the production outbound transport from Hermes**: the
 outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`);
-ntfy is legacy/disabled state pending later cleanup/removal.
+ntfy is architecturally rejected/unsupported — remaining Hermes legacy
+code is pending a dedicated cleanup after P2B QA closeout.
 
 Phase 7 (implemented, merged, and PASSED final integration QA) added Hermes
 bounded FCM redelivery as the primary recent-loss safety net, plus
@@ -447,9 +448,11 @@ active   disabled
 
 `notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
 
-ntfy is legacy/disabled — NOT an approved fallback or rollback path. Phase 8
-must test Ackline/FCM alone and must not silently switch to ntfy. Any
-remaining ntfy code/configuration is pending later cleanup/removal.
+ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
+option, alternate production transport, or roadmap item. Phase 8
+must test Ackline/FCM alone and must not silently switch to ntfy. Remaining
+Hermes ntfy code/configuration is pending a dedicated cleanup change
+after P2B QA closeout (not yet deleted).
 
 ---
 
@@ -546,8 +549,9 @@ Hermes queue
 `5b5777a827e097a98687bc6fae0060a2e6fcebb3`), with the canary
 `8304672d700c4056b5d456eae49b6060` retained as historical evidence.
 
-ntfy is legacy/disabled state — Phase 8 validates Ackline/FCM alone with no
-ntfy fallback.
+ntfy is architecturally rejected/unsupported — Phase 8 validates
+Ackline/FCM alone with no ntfy fallback; Hermes legacy ntfy code removal
+is a dedicated post-QA cleanup.
 
 Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) is
 **implemented and merged**; its final architecture is documented in §17.
@@ -698,10 +702,9 @@ Mechanical reuse of the proven Phase 5/6 receive path.
   observation → baseline, `rePairRequired = false`. Later different FID →
   store new FID, `rePairRequired = true`, enqueue recovery.
 - Setup shows an actionable re-pair warning. `rePairRequired` survives
-  process restarts and clears through server-confirmed P2A claim success;
-  the legacy honor-system Setup action ("Mark as updated") after manual
-  `~/.hermes/secrets/ackline-fid` update remains only until P2B removes
-  it (P2B hardening item).
+  process restarts and clears only through server-confirmed pairing-claim
+  success. The legacy honor-system Setup action ("Mark as updated") is
+  REMOVED (P2B-A2); re-pair uses the QR scanner flow.
 - No device registry. No standing token-less registration. Manual FID copy
   is legacy/manual fallback; the implemented path is authorized pairing
   claim (see §18).
@@ -813,7 +816,8 @@ configured but post-reboot auto-start has not been physically verified yet.
 
 > This section documents the implemented P2A boundary (Hermes H1 +
 > Ackline A1, physically integrated — see `docs/P2A_QA_RESULTS.md`). P2B
-> builds the product UX on this frozen contract; P2C remains planned.
+> product UX (H1 operator tooling + A1 onboarding + A2 scanner/re-pair) is
+> implemented on this frozen contract and is in P2B-QA; P2C remains planned.
 > Normative P2B package: `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and
 > `docs/P2B_TASKS.md`; `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
@@ -860,8 +864,8 @@ the end-to-end self-test.
 - Hermes has exactly one authorized write path for `ackline-fid`:
   valid pairing claim only (implemented). No standing registration
   endpoint.
-- adb staging + manual FID copy + honor-system "Mark as updated" are now
-  legacy/debug fallback (honor-system removal is a P2B task).
+- adb staging + manual FID copy are legacy/debug fallback; the
+honor-system "Mark as updated" action is REMOVED (P2B-A2).
 - P2A established the server-confirmed FID baseline as historical protocol
   behavior. P2B-A1 adds durable `serverPairingConfirmed`; observing an FID
   alone is not pairing confirmation, and readiness must not use it as a

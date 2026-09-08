@@ -13,7 +13,10 @@ The app has two core responsibilities:
 
 ## 2. Primary Product Goal
 
-Deliver Hermes alerts through FCM push (replacing the former ntfy + persistent WebSocket path) without requiring the user to manually reopen the app after Wi-Fi/mobile transitions or temporary connectivity loss. ntfy is legacy/disabled — not an approved fallback.
+Deliver Hermes alerts through FCM push (replacing the former ntfy + persistent WebSocket path) without requiring the user to manually reopen the app after Wi-Fi/mobile transitions or temporary connectivity loss. ntfy is
+architecturally rejected/unsupported — not a fallback, rollback, or
+roadmap item (remaining Hermes legacy code removal is a dedicated
+post-QA cleanup).
 
 Target path:
 
@@ -198,7 +201,7 @@ MVP setup may expose:
 
 Do not turn setup into an operations dashboard.
 
-### 9.4 Guided Pairing (Post-MVP P2 — P2A implemented, P2B next)
+### 9.4 Guided Pairing (Post-MVP P2 — P2A implemented, P2B implementation complete, P2B-QA active)
 
 Normal user setup must not require:
 
@@ -233,13 +236,15 @@ re-pairing an existing installation requires explicit replace intent.
 P2A capability (protocol + provisioning foundation): IMPLEMENTED
   (Hermes H1 + Ackline A1, physically integrated —
   see docs/P2A_QA_RESULTS.md).
-P2B product UX (onboarding wizard, QR scan, re-pair): NEXT.
+P2B product UX (onboarding wizard, QR scan, re-pair): IMPLEMENTATION
+COMPLETE (H1 + A1 + A2 landed); P2B-QA active gate (partial evidence,
+NOT PASS).
 ```
 
-Do not claim the P2B UX already exists. Manual FID copy and adb key
-staging are now legacy/debug fallback only; normal setup is intended to
-use guided P2 pairing (P2B builds the UX on the implemented P2A
-protocol).
+The P2B UX (guided onboarding, real QR scanner, server-confirmed re-pair;
+honor-system action removed) is implemented and in physical QA. Manual FID
+copy and adb key staging are legacy/debug fallback only; normal setup uses
+guided P2 pairing.
 
 ## 10. UX Direction
 

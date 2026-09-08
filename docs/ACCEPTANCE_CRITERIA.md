@@ -187,8 +187,10 @@ Every completed phase must have:
 
 ## 10. Replacement Gate
 
-ntfy is legacy/disabled state — NOT an approved fallback or rollback path.
-Phase 8 tests Ackline/FCM alone and must not silently switch to ntfy.
+ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
+path, or roadmap item. Phase 8 tests Ackline/FCM alone and must not
+silently switch to ntfy. Remaining Hermes legacy ntfy code removal is a
+dedicated post-QA cleanup (not yet deleted).
 
 Phase 8 validates Ackline/FCM as sole transport when:
 
@@ -205,7 +207,7 @@ product/UX acceptance PASS
 final GitHub review PASS
 ```
 
-## 11. Pairing Acceptance (Post-MVP P2 — P2A proven; P2B next)
+## 11. Pairing Acceptance (Post-MVP P2 — P2A proven; P2B implementation complete; P2B-QA active)
 
 P2A status: IMPLEMENTED and physically integrated
 (`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS). Proven in P2A:
@@ -220,7 +222,7 @@ P2A status: IMPLEMENTED and physically integrated
   — PROVEN (P2A: fresh differing FID rejected, explicit replace succeeded)
 - The phone clears `rePairRequired` only on server-confirmed claim
   success, never on self-attestation. — PROVEN (P2A provisioning path;
-  honor-system "Marcar como actualizado" removal is a P2B task)
+  honor-system "Marcar como actualizado" removal COMPLETE in P2B-A2)
 - A fresh install reaches a usable encrypted state without adb or manual
   FID editing (key + FID + ACK URL provisioned). — PROVEN (P2A:
   real FCM through provisioned FID, real E2EE decrypt, Room exactly-once,
@@ -237,7 +239,7 @@ NOT PROVEN in the P2A physical run (not failed, not blocking):
   P2B places notification-permission onboarding before pairing / future
   setup verification.
 
-P2B acceptance (applies once P2B ships):
+P2B acceptance (P2B implementation landed; applies fully once P2B-QA passes):
 
 These add to — and never weaken — the security/reliability criteria above.
 

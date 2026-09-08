@@ -16,8 +16,10 @@ Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
 Ackline docs branch: `docs-p2b-qa-ntfy-roadmap` (docs-only alignment; no source changes).
 
-Ackline/Hermes base: clean `dev` — `4012532a8e146e9d2a3d82d7a6e9785885abbba7`
+Ackline base: clean `dev` — `4012532a8e146e9d2a3d82d7a6e9785885abbba7`
 (`fix: add scanner accessibility semantics`).
+
+Hermes Personal Admin is a separate repository; this docs-only Ackline change does not assert or update its current HEAD.
 
 Phase 7 blockers: **0**
 

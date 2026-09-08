@@ -21,28 +21,42 @@ internal fun PairingContent(state: PairingPresentation, presenter: PairingPresen
     when (state) {
         PairingPresentation.Idle, PairingPresentation.WaitingForRegistration -> {
             CircularProgressIndicator()
-            Text("Preparando la conexión…")
+            Text("Preparando la conexión…", modifier = Modifier.pairingStatusSemantics())
             Text("Si tarda, comprueba tu conexión y vuelve a abrir Ackline.")
         }
         PairingPresentation.TailscaleRequired -> {
-            Text("Activa Tailscale en este teléfono para emparejar. Ackline usa Tailscale para hablar con tu Hermes de forma privada.")
+            Text(
+                "Activa Tailscale en este teléfono para emparejar. Ackline usa Tailscale para hablar con tu Hermes de forma privada.",
+                modifier = Modifier.pairingStatusSemantics(),
+            )
             PairingButton("Comprobar conexión", presenter::refresh)
         }
         PairingPresentation.ReadyToScan -> {
-            Text("El QR de tu Mac conectará Ackline con Hermes.", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "El QR de tu Mac conectará Ackline con Hermes.",
+                modifier = Modifier.pairingStatusSemantics(),
+                style = MaterialTheme.typography.bodyLarge,
+            )
             PairingButton("Escanear QR", presenter::beginScan)
         }
         PairingPresentation.Scanning -> QrScanner(presenter::acceptScannedQr, presenter::cancelScan)
-        PairingPresentation.Pairing -> { CircularProgressIndicator(); Text("Emparejando…") }
+        PairingPresentation.Pairing -> {
+            CircularProgressIndicator()
+            Text("Emparejando…", modifier = Modifier.pairingStatusSemantics())
+        }
         is PairingPresentation.Error -> {
-            Text(state.error.message, color = MaterialTheme.colorScheme.error)
+            Text(
+                state.error.message,
+                modifier = Modifier.pairingStatusSemantics(),
+                color = MaterialTheme.colorScheme.error,
+            )
             PairingButton(when (state.error.action) {
                 PairingErrorAction.NewQr -> "Escanear un nuevo QR"
                 PairingErrorAction.ReplacementQr -> "Escanear QR de reemplazo"
                 else -> "Volver a conectar"
             }, presenter::retryScan)
         }
-        PairingPresentation.Success -> Text("Hermes conectado")
+        PairingPresentation.Success -> Text("Hermes conectado", modifier = Modifier.pairingStatusSemantics())
     }
 }
 

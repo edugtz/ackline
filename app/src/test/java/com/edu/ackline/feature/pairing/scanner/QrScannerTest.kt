@@ -10,12 +10,33 @@ import com.google.zxing.MultiFormatWriter
 import java.lang.reflect.Proxy
 import java.nio.ByteBuffer
 import java.util.concurrent.Executor
+import androidx.compose.ui.semantics.SemanticsConfiguration
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import com.edu.ackline.feature.pairing.QR_CAMERA_CONTENT_DESCRIPTION
+import com.edu.ackline.feature.pairing.markPairingStatus
+import com.edu.ackline.feature.pairing.markQrCamera
 import org.junit.Assert.*
 import org.junit.Test
 
 class QrScannerTest {
     private val qr = """{"v":1,"endpoint":"https://example.com/pairing/claim","session_id":"test-session","token":"test-token"}"""
     private val direct = Executor { it.run() }
+
+    @Test fun scannerAccessibilityUsesRedactedCameraDescriptionAndPoliteStatus() {
+        val camera = SemanticsConfiguration().apply { markQrCamera() }
+        val status = SemanticsConfiguration().apply { markPairingStatus() }
+
+        assertEquals(
+            listOf(QR_CAMERA_CONTENT_DESCRIPTION),
+            camera.getOrNull(SemanticsProperties.ContentDescription),
+        )
+        assertFalse(QR_CAMERA_CONTENT_DESCRIPTION.contains("token", ignoreCase = true))
+        assertFalse(QR_CAMERA_CONTENT_DESCRIPTION.contains("session", ignoreCase = true))
+        assertFalse(QR_CAMERA_CONTENT_DESCRIPTION.contains("FID", ignoreCase = true))
+        assertEquals(LiveRegionMode.Polite, status.getOrNull(SemanticsProperties.LiveRegion))
+    }
 
     @Test fun generatedQrDecodesAtEveryRightAngleAndFeedsExistingParser() {
         val matrix = MultiFormatWriter().encode(qr, BarcodeFormat.QR_CODE, 320, 320)

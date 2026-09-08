@@ -19,6 +19,10 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.camera.core.CameraState
+import com.edu.ackline.feature.pairing.QR_SCANNER_GUIDANCE
+import com.edu.ackline.feature.pairing.QR_SCANNER_UNRELATED_GUIDANCE
+import com.edu.ackline.feature.pairing.pairingStatusSemantics
+import com.edu.ackline.feature.pairing.qrCameraSemantics
 import java.util.concurrent.Executors
 
 @Composable
@@ -49,8 +53,11 @@ internal fun QrScanner(accept: (String) -> Boolean, onCancel: () -> Unit) {
                 Button(onClick = { failed = false }, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("Reintentar cámara") }
             }
             else -> {
-                Text(if (unrelated) "Este QR no es de Ackline" else "Apunta al QR de Hermes en tu Mac.",
-                    style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (unrelated) QR_SCANNER_UNRELATED_GUIDANCE else QR_SCANNER_GUIDANCE,
+                    modifier = Modifier.pairingStatusSemantics(),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
                     CameraPreview(
                         accept = { text -> accept(text).also { terminal -> unrelated = !terminal } },
@@ -71,7 +78,13 @@ private fun CameraPreview(accept: (String) -> Boolean, onFailure: () -> Unit) {
     val view = remember(context) {
         PreviewView(context).apply { implementationMode = PreviewView.ImplementationMode.COMPATIBLE }
     }
-    AndroidView(factory = { view }, modifier = Modifier.fillMaxWidth().height(320.dp))
+    AndroidView(
+        factory = { view },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(320.dp)
+            .qrCameraSemantics(),
+    )
     DisposableEffect(view, owner) {
         val executor = Executors.newSingleThreadExecutor()
         val main = ContextCompat.getMainExecutor(context)

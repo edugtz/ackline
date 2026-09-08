@@ -128,7 +128,7 @@ class AcklineApplication : Application() {
             enqueueRecovery = recoveryTriggers::onFidRegistration,
             publishRestoredState = SetupState::onPairingStateRestored,
             publishObservedState = SetupState::onPairingStateObserved,
-            publishUpdatedState = SetupState::onRePairUpdated,
+            publishUpdatedState = SetupState::onPairingStateUpdated,
             publishRegistration = SetupState::onRegistered,
             diagnosticLogger = { message -> Log.e(TAG, message) },
             packageUpgrade = isPackageUpgrade(this),
@@ -189,7 +189,6 @@ class AcklineApplication : Application() {
         }
     }
 
-    internal fun markRePairUpdated(): Boolean = fidRePairManager.markRePairUpdated()
 
     private companion object {
         const val DATABASE_NAME = "ackline.db"

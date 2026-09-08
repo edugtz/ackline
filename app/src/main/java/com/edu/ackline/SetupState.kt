@@ -68,7 +68,7 @@ object SetupState {
         publishPairingState(pairingState)
     }
 
-    internal fun onRePairUpdated(pairingState: FidRePairState) {
+    internal fun onPairingStateUpdated(pairingState: FidRePairState) {
         publishPairingState(pairingState)
     }
 

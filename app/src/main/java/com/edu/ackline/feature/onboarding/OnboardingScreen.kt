@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.edu.ackline.SetupUiState
+import com.edu.ackline.feature.pairing.PairingContent
 import com.edu.ackline.feature.pairing.PairingPresentation
 import com.edu.ackline.feature.pairing.PairingViewModel
 import com.edu.ackline.ui.AcklineTopBar
@@ -67,6 +67,9 @@ internal fun OnboardingScreen(setup: SetupUiState, pairing: PairingViewModel, on
                     if (!setup.notificationGranted) {
                         Text("Activa las notificaciones para ver las alertas de Hermes.")
                         PrimaryAction(permission.label, permission.launch)
+                        TextButton(onClick = permission.openSettings, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                            Text("Ajustes de notificaciones")
+                        }
                     }
                     PrimaryAction("Ir a Mis alertas", onInbox)
                 }
@@ -81,34 +84,15 @@ internal fun OnboardingScreen(setup: SetupUiState, pairing: PairingViewModel, on
                         PrimaryAction("Continuar") { step = 2 }
                     } else {
                         PrimaryAction(permission.label, permission.launch)
+                        TextButton(onClick = permission.openSettings, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                            Text("Ajustes de notificaciones")
+                        }
                         TextButton(onClick = { step = 2 }, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
                             Text("Continuar sin notificaciones")
                         }
                     }
                 }
-                else -> when (val state = presentation) {
-                    PairingPresentation.Idle, PairingPresentation.WaitingForRegistration -> {
-                        CircularProgressIndicator()
-                        Text("Preparando la conexión…")
-                        Text("Si tarda, comprueba tu conexión y vuelve a abrir Ackline.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    PairingPresentation.TailscaleRequired -> {
-                        Text("Activa Tailscale en este teléfono para emparejar. Ackline usa Tailscale para hablar con tu Hermes de forma privada.")
-                        PrimaryAction("Comprobar conexión", pairing.presenter::refresh)
-                    }
-                    PairingPresentation.ReadyToScan -> {
-                        Text("El QR de tu Mac conectará Ackline con Hermes.", style = MaterialTheme.typography.bodyLarge)
-                        Text("El escáner estará disponible en la siguiente actualización.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = {}, enabled = false, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("Escanear QR") }
-                    }
-                    PairingPresentation.Scanning -> Text("Buscando el QR de Ackline…")
-                    PairingPresentation.Pairing -> { CircularProgressIndicator(); Text("Emparejando…") }
-                    is PairingPresentation.Error -> {
-                        Text(state.error.message, color = MaterialTheme.colorScheme.error)
-                        PrimaryAction("Volver a conectar", pairing.presenter::retryScan)
-                    }
-                    PairingPresentation.Success -> Text("Actualizando el estado…")
-                }
+                else -> PairingContent(presentation, pairing.presenter)
             }
         }
     }

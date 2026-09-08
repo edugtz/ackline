@@ -40,7 +40,11 @@ class LegacyP2aBootstrapTest {
         assertTrue(changed.rePairRequired)
         assertFalse(SetupUiState().withPairingState(changed).needsOnboarding)
         assertEquals(RegistrationState.Waiting, SetupUiState().withPairingState(changed).registrationState)
-        assertTrue(restarted.markUpdated().serverPairingConfirmed)
+        assertTrue(restarted.read().rePairRequired)
+        assertEquals(PairingProvisioningResult.Success,
+            provisioner.pair("https://example.com/pairing/claim", "replacement-session", "synthetic-token", "new-fixture-fid"))
+        assertFalse(FidRePairStore(storage).read().rePairRequired)
+        assertTrue(FidRePairStore(storage).read().serverPairingConfirmed)
     }
 
     @Test fun bootstrapWaitsForBothStartupInputsInEitherOrder() {
@@ -103,7 +107,7 @@ class LegacyP2aBootstrapTest {
         manager.onStartupProvisioningResolved(true, true)
         assertFalse(published.serverPairingConfirmed)
         assertTrue(published.legacyP2aBootstrapEvaluated)
-        manager.markRePairUpdated()
+        assertTrue(storage.value.rePairRequired)
         manager.onRegistered("old")
         manager.onStartupProvisioningResolved(true, true)
         assertFalse(storage.value.serverPairingConfirmed)

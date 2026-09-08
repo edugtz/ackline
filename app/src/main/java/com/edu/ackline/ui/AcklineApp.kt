@@ -9,6 +9,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.edu.ackline.SetupState
 import com.edu.ackline.feature.onboarding.OnboardingScreen
 import com.edu.ackline.feature.onboarding.rememberNotificationPermissionAction
+import com.edu.ackline.feature.pairing.RePairScreen
 import com.edu.ackline.feature.pairing.PairingPresentation
 import com.edu.ackline.feature.pairing.PairingViewModel
 import androidx.compose.material3.Text
@@ -35,19 +36,26 @@ fun AcklineApp() {
     val presentation by pairing.presenter.state.collectAsState()
     var enteredInbox by rememberSaveable { mutableStateOf(false) }
     rememberNotificationPermissionAction()
-    val showOnboarding = setup.needsOnboarding ||
-        (!enteredInbox && (presentation == PairingPresentation.Pairing || presentation == PairingPresentation.Success))
+    var repairing by rememberSaveable { mutableStateOf(false) }
+    val showOnboarding = !repairing && (setup.needsOnboarding ||
+        (!enteredInbox && (presentation == PairingPresentation.Pairing || presentation == PairingPresentation.Success)))
     var currentScreen by remember { mutableStateOf<AppScreen>(AppScreen.Inbox) }
 
-    BackHandler(enabled = !showOnboarding && currentScreen !is AppScreen.Inbox) {
+    BackHandler(enabled = !repairing && !showOnboarding && currentScreen !is AppScreen.Inbox) {
         currentScreen = AppScreen.Inbox
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         if (!setup.legacyBootstrapResolved && !setup.hasConfirmedPairing) {
             Text("Preparando Ackline…")
+        } else if (repairing) {
+            RePairScreen(setup, pairing, onBack = {
+                pairing.presenter.finishFlow()
+                repairing = false
+                currentScreen = AppScreen.Setup
+            })
         } else if (showOnboarding) {
-            OnboardingScreen(setup, pairing, onInbox = { enteredInbox = true })
+            OnboardingScreen(setup, pairing, onInbox = { enteredInbox = true; pairing.presenter.finishFlow() })
         } else when (val screen = currentScreen) {
             AppScreen.Inbox -> InboxScreen(
                 onAlertClick = { notificationId ->
@@ -63,6 +71,7 @@ fun AcklineApp() {
 
             AppScreen.Setup -> SetupScreen(
                 onBack = { currentScreen = AppScreen.Inbox },
+                onRePair = { pairing.presenter.finishFlow(); repairing = true },
             )
         }
     }

@@ -11,6 +11,7 @@ import com.edu.ackline.RegistrationState
 import com.edu.ackline.SetupState
 import com.edu.ackline.SetupUiState
 import com.edu.ackline.pairing.PairingProvisioningResult
+import java.security.MessageDigest
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,14 +37,18 @@ internal class PairingPresenter(
 ) {
     private val mutableState = MutableStateFlow<PairingPresentation>(PairingPresentation.Idle)
     val state = mutableState.asStateFlow()
-    private var ambiguousRetryUsed = false
+    // Session fingerprints only, retained across scanner cancellation/navigation/rotation.
+    // No QR bearer is retained between claims. Process restart relies on Hermes single-use enforcement.
+    private val ambiguousSessions = mutableSetOf<String>()
+    private val exhaustedSessions = mutableSetOf<String>()
 
     @Synchronized
     fun refresh() {
         if (mutableState.value == PairingPresentation.Pairing || mutableState.value == PairingPresentation.Success ||
             mutableState.value is PairingPresentation.Error
         ) return
-        mutableState.value = prerequisite() ?: PairingPresentation.ReadyToScan
+        mutableState.value = prerequisite() ?: if (mutableState.value == PairingPresentation.Scanning)
+            PairingPresentation.Scanning else PairingPresentation.ReadyToScan
     }
 
     private fun prerequisite(): PairingPresentation? {
@@ -62,18 +67,42 @@ internal class PairingPresenter(
         mutableState.value = prerequisite() ?: PairingPresentation.ReadyToScan
     }
 
-    // A1 integration hook only. No external intent, clipboard, or production manual-input UI.
     @Synchronized
-    fun acceptDebugQr(input: String, debugEnabled: Boolean) {
-        if (!debugEnabled || mutableState.value != PairingPresentation.ReadyToScan) return
-        prerequisite()?.let { mutableState.value = it; return }
-        mutableState.value = PairingPresentation.Scanning
+    fun beginScan() {
+        if (mutableState.value != PairingPresentation.ReadyToScan) return
+        mutableState.value = prerequisite() ?: PairingPresentation.Scanning
+    }
+
+    @Synchronized
+    fun cancelScan() {
+        if (mutableState.value == PairingPresentation.Scanning) {
+            mutableState.value = prerequisite() ?: PairingPresentation.ReadyToScan
+        }
+    }
+
+    @Synchronized
+    fun finishFlow() {
+        if (mutableState.value != PairingPresentation.Pairing) mutableState.value = PairingPresentation.Idle
+    }
+
+    /** Returns false only for an unrelated QR, which leaves this scan session active. */
+    @Synchronized
+    fun acceptScannedQr(input: String): Boolean {
+        if (mutableState.value != PairingPresentation.Scanning) return true
+        prerequisite()?.let { mutableState.value = it; return true }
         val parsed = PairingQrParser.parse(input)
         when (parsed) {
-            PairingQrResult.Unrelated -> { mutableState.value = PairingPresentation.ReadyToScan; return }
-            PairingQrResult.Invalid -> { mutableState.value = PairingPresentation.Error(invalidQrError()); return }
+            PairingQrResult.Unrelated -> return false
+            PairingQrResult.Invalid -> { mutableState.value = PairingPresentation.Error(invalidQrError()); return true }
             is PairingQrResult.Valid -> {
-                val fid = setup().installationId ?: run { refresh(); return }
+                val fingerprint = MessageDigest.getInstance("SHA-256")
+                    .digest((parsed.payload.endpoint + "\u0000" + parsed.payload.sessionId).toByteArray())
+                    .joinToString("") { "%02x".format(it) }
+                if (fingerprint in exhaustedSessions) {
+                    mutableState.value = PairingPresentation.Error(invalidQrError())
+                    return true
+                }
+                val fid = setup().installationId ?: run { refresh(); return true }
                 mutableState.value = PairingPresentation.Pairing
                 executor.execute {
                     val result = try {
@@ -82,20 +111,24 @@ internal class PairingPresenter(
                         // Unknown exception may be after a successful remote claim.
                         PairingProvisioningResult.Failure(com.edu.ackline.pairing.PairingProvisioningFailure.FidConfirmationFailed)
                     }
-                    complete(result)
+                    complete(result, fingerprint)
                 }
             }
         }
+        return true
     }
 
     @Synchronized
-    private fun complete(result: PairingProvisioningResult) {
+    private fun complete(result: PairingProvisioningResult, fingerprint: String) {
         mutableState.value = when (result) {
             PairingProvisioningResult.Success -> PairingPresentation.Success
             is PairingProvisioningResult.Failure -> {
                 var error = pairingError(result.reason)
                 if (error.action == PairingErrorAction.RetryOnce) {
-                    if (ambiguousRetryUsed) error = invalidQrError() else ambiguousRetryUsed = true
+                    if (!ambiguousSessions.add(fingerprint)) error = invalidQrError()
+                }
+                if (error.action in setOf(PairingErrorAction.NewQr, PairingErrorAction.ReplacementQr)) {
+                    exhaustedSessions.add(fingerprint)
                 }
                 PairingPresentation.Error(error)
             }
@@ -115,7 +148,6 @@ internal class PairingViewModel(application: Application) : AndroidViewModel(app
         result
     }
 
-    internal fun acceptDebugQr(input: String) = presenter.acceptDebugQr(input, BuildConfig.DEBUG)
     override fun onCleared() {
         executor.shutdown() // A claim already started completes its durable finalization.
     }

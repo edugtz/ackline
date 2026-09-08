@@ -36,28 +36,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.edu.ackline.feature.onboarding.rememberNotificationPermissionAction
-import com.edu.ackline.AcklineApplication
 import com.edu.ackline.RegistrationState
 import com.edu.ackline.SetupState
 import com.edu.ackline.ui.AcklineTopBar
 
-/**
- * User-facing "Ajustes" screen (Phase 9 Change C).
- *
- * Presents the same app/setup state as the former technical bootstrap
- * surface — notification permission, push registration, encryption state,
- * Device ID (FID) and last test message — grouped into a coherent settings
- * layout using the Ackline teal visual system. Presentation only: no state
- * semantics or behavior were added or changed.
- */
+/** Readiness, server-confirmed re-pair entry, and quiet opt-in diagnostics. */
 @Composable
-fun SetupScreen(onBack: (() -> Unit)? = null) {
+fun SetupScreen(onBack: (() -> Unit)? = null, onRePair: () -> Unit) {
     val setupState by SetupState.state.collectAsState()
     val context = LocalContext.current
 
     val notificationGranted = setupState.notificationGranted
     val permission = rememberNotificationPermissionAction()
-    var rePairUpdateErrorMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -119,6 +109,9 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                     ) {
                         Text(permission.label)
                     }
+                    TextButton(onClick = permission.openSettings, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                        Text("Ajustes de notificaciones")
+                    }
                 }
                 StatusRow(
                     label = "Registro push",
@@ -140,69 +133,30 @@ fun SetupScreen(onBack: (() -> Unit)? = null) {
                 )
             }
 
-            // ── Device
-            SetupSection(title = "Dispositivo") {
-                val installationId = setupState.installationId
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "ID del dispositivo",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = installationId ?: "Esperando",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        if (installationId != null) {
-                            OutlinedButton(
-                                onClick = { copyDeviceId(context, installationId) },
-                                // Default M3 button height is 40dp; enforce a
-                                // >= 48dp effective touch target.
-                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                            ) {
-                                Text("Copiar")
-                            }
-                        }
-                    }
-                }
-                if (setupState.rePairRequired) {
-                    Text(
-                        text = "El Device ID cambió. Actualiza ackline-fid en Hermes.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    TextButton(
-                        onClick = {
-                            val updated = (context.applicationContext as AcklineApplication)
-                                .markRePairUpdated()
-                            rePairUpdateErrorMessage = if (updated) {
-                                null
-                            } else {
-                                "No se pudo guardar el cambio. Intenta de nuevo."
-                            }
-                        },
-                    ) {
-                        Text("Marcar como actualizado")
-                    }
-                    rePairUpdateErrorMessage?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
+            if (setupState.hasConfirmedPairing && setupState.rePairRequired) {
+                SetupSection(title = "Conexión con Hermes") {
+                    Text("Necesitas volver a conectar Ackline con Hermes.")
+                    Button(onClick = onRePair, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                        Text("Emparejar nuevamente")
                     }
                 }
             }
 
             // ── Diagnostics — deliberately quieter than the sections above.
             SetupSection(title = "Diagnóstico", quiet = true) {
+                // Kept only as a collapsed diagnostic affordance, never a setup instruction.
+                var showId by remember { mutableStateOf(false) }
+                TextButton(onClick = { showId = !showId }, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                    Text(if (showId) "Ocultar identificador de diagnóstico" else "Identificador de diagnóstico")
+                }
+                if (showId) {
+                    setupState.installationId?.let { id ->
+                        Text(id, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                        OutlinedButton(onClick = { copyDeviceId(context, id) }, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
+                            Text("Copiar")
+                        }
+                    }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "Última prueba",

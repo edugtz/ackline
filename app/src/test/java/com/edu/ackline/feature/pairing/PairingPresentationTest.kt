@@ -35,7 +35,7 @@ class PairingPresentationTest {
         for (failure in failures) assertEquals(PairingErrorAction.NewQr,pairingError(failure).action)
         for (failure in PairingClaimFailure.entries) assertEquals(pairingError(failure),pairingError(PairingProvisioningFailure.ClaimFailed(failure)))
     }
-    @Test fun prerequisiteTransitionsAndDebugOnlyInput() {
+    @Test fun prerequisiteTransitionsAndProductionScannerInput() {
         var setup=SetupUiState()
         var vpn=false
         var claims=0
@@ -43,18 +43,17 @@ class PairingPresentationTest {
         assertEquals(PairingPresentation.Idle,presenter.state.value)
         presenter.refresh()
         assertEquals(PairingPresentation.WaitingForRegistration,presenter.state.value)
-        presenter.acceptDebugQr(qr,true)
+        presenter.acceptScannedQr(qr)
         assertEquals(0,claims)
         setup=ready
         presenter.refresh()
         assertEquals(PairingPresentation.TailscaleRequired,presenter.state.value)
         vpn=true;presenter.refresh()
         assertEquals(PairingPresentation.ReadyToScan,presenter.state.value)
-        presenter.acceptDebugQr(qr,false)
-        assertEquals(0,claims)
-        presenter.acceptDebugQr("unrelated",true)
-        assertEquals(PairingPresentation.ReadyToScan,presenter.state.value)
-        presenter.acceptDebugQr(qr,true)
+        presenter.beginScan()
+        presenter.acceptScannedQr("unrelated")
+        assertEquals(PairingPresentation.Scanning,presenter.state.value)
+        presenter.acceptScannedQr(qr)
         assertEquals(1,claims)
         assertEquals(PairingPresentation.Success,presenter.state.value)
     }
@@ -67,10 +66,10 @@ class PairingPresentationTest {
             setup=setup.copy(hasConfirmedPairing=true,encryptionReady=true,ackProvisioned=true)
             PairingProvisioningResult.Success
         }
-        presenter.refresh();presenter.acceptDebugQr(qr,true)
+        presenter.refresh();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(0,claims)
         assertEquals(PairingPresentation.Pairing,presenter.state.value)
-        presenter.acceptDebugQr(qr,true)
+        presenter.acceptScannedQr(qr)
         work!!.run()
         assertEquals(1,claims)
         assertEquals(PairingPresentation.Success,presenter.state.value)
@@ -81,25 +80,56 @@ class PairingPresentationTest {
     @Test fun ambiguousTransportOneRetryThenConsumedRequiresNewQr() {
         val results=ArrayDeque(listOf(PairingClaimFailure.TRANSPORT,PairingClaimFailure.CONSUMED))
         val presenter=PairingPresenter(Executor { it.run() },{ready},{true}) { _, _ -> PairingProvisioningResult.Failure(PairingProvisioningFailure.ClaimFailed(results.removeFirst())) }
-        presenter.refresh();presenter.acceptDebugQr(qr,true)
+        presenter.refresh();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(PairingErrorAction.RetryOnce,(presenter.state.value as PairingPresentation.Error).error.action)
-        presenter.retryScan();presenter.acceptDebugQr(qr,true)
+        presenter.retryScan();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(PairingErrorAction.NewQr,(presenter.state.value as PairingPresentation.Error).error.action)
     }
     @Test fun repeatedAmbiguousTransportStopsOfferingSameQr() {
         val presenter=PairingPresenter(Executor { it.run() },{ready},{true}) { _, _ -> PairingProvisioningResult.Failure(PairingProvisioningFailure.ClaimFailed(PairingClaimFailure.TRANSPORT)) }
-        presenter.refresh();presenter.acceptDebugQr(qr,true)
-        presenter.retryScan();presenter.acceptDebugQr(qr,true)
+        presenter.refresh();presenter.beginScan();presenter.acceptScannedQr(qr)
+        presenter.retryScan();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(PairingErrorAction.NewQr,(presenter.state.value as PairingPresentation.Error).error.action)
     }
     @Test fun unexpectedExceptionRequiresNewQrAndMigrationGatePreventsClaim() {
         var setup=ready.copy(legacyBootstrapResolved=false)
         var calls=0
         val presenter=PairingPresenter(Executor { it.run() },{setup},{true}) { _, _ -> calls++;throw IllegalStateException("private fixture") }
-        presenter.refresh();presenter.acceptDebugQr(qr,true)
+        presenter.refresh();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(0,calls)
-        setup=ready;presenter.refresh();presenter.acceptDebugQr(qr,true)
+        setup=ready;presenter.refresh();presenter.beginScan();presenter.acceptScannedQr(qr)
         assertEquals(PairingErrorAction.NewQr,(presenter.state.value as PairingPresentation.Error).error.action)
         assertFalse(presenter.state.value.toString().contains("private fixture"))
     }
+    @Test fun closingAndReopeningScannerCannotResetAmbiguousSessionBudget() {
+        var claims = 0
+        val presenter = PairingPresenter(Executor { it.run() }, { ready }, { true }) { _, _ ->
+            claims++
+            PairingProvisioningResult.Failure(PairingProvisioningFailure.ClaimFailed(PairingClaimFailure.TRANSPORT))
+        }
+        repeat(3) {
+            presenter.finishFlow(); presenter.refresh(); presenter.beginScan()
+            presenter.cancelScan(); presenter.beginScan()
+            presenter.acceptScannedQr(qr)
+        }
+        assertEquals(2, claims)
+        assertEquals(PairingErrorAction.NewQr, (presenter.state.value as PairingPresentation.Error).error.action)
+        presenter.retryScan(); presenter.beginScan()
+        presenter.acceptScannedQr(qr.replace("fixture", "new-session"))
+        assertEquals(3, claims)
+        assertEquals(PairingErrorAction.RetryOnce, (presenter.state.value as PairingPresentation.Error).error.action)
+    }
+
+    @Test fun refreshKeepsActiveScanAndCancelRejectsLateFrame() {
+        var claims = 0
+        val presenter = PairingPresenter(Executor { it.run() }, { ready }, { true }) { _, _ ->
+            claims++; PairingProvisioningResult.Success
+        }
+        presenter.refresh(); presenter.beginScan(); presenter.refresh()
+        assertEquals(PairingPresentation.Scanning, presenter.state.value)
+        presenter.cancelScan(); presenter.acceptScannedQr(qr)
+        assertEquals(0, claims)
+        assertEquals(PairingPresentation.ReadyToScan, presenter.state.value)
+    }
+
 }

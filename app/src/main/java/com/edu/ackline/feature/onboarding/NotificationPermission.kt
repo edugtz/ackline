@@ -30,9 +30,13 @@ internal enum class PermissionAction { Request, Settings }
 internal fun permissionAction(denied: Boolean, rationale: Boolean, runtimePermission: Boolean): PermissionAction =
     if (!runtimePermission || (denied && !rationale)) PermissionAction.Settings else PermissionAction.Request
 
-internal data class NotificationPermissionAction(val label: String, val launch: () -> Unit)
+internal data class NotificationPermissionAction(val label: String, val launch: () -> Unit, val openSettings: () -> Unit)
 
-/** Explicit actions only; no durable prompt counter. Refreshes shared truth on Settings return. */
+/**
+ * Explicit actions only; refresh shared truth on Settings return. Android's public APIs cannot
+ * distinguish first request from permanent denial after a fresh process when rationale is false.
+ * Every permission surface therefore also offers Settings directly, without a prompt counter.
+ */
 @Composable
 internal fun rememberNotificationPermissionAction(onGranted: () -> Unit = {}): NotificationPermissionAction {
     val context = LocalContext.current
@@ -40,10 +44,13 @@ internal fun rememberNotificationPermissionAction(onGranted: () -> Unit = {}): N
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var denied by rememberSaveable { mutableStateOf(false) }
     var rationale by rememberSaveable { mutableStateOf(false) }
+    var runtimeGranted by rememberSaveable { mutableStateOf(false) }
     val grantedCallback by rememberUpdatedState(onGranted)
     val runtimePermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
     fun refresh() {
         SetupState.onNotificationPermissionChanged(hasNotificationPermission(context))
+        runtimeGranted = runtimePermission && ContextCompat.checkSelfPermission(context,
+            Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
         rationale = runtimePermission && activity != null && ActivityCompat.shouldShowRequestPermissionRationale(
             activity, Manifest.permission.POST_NOTIFICATIONS,
         )
@@ -61,7 +68,11 @@ internal fun rememberNotificationPermissionAction(onGranted: () -> Unit = {}): N
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val action = permissionAction(denied, rationale, runtimePermission)
+    val action = permissionAction(denied, rationale, runtimePermission && !runtimeGranted)
+    val openSettings = {
+        context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+    }
     return NotificationPermissionAction(
         label = when {
             action == PermissionAction.Settings -> "Abrir ajustes de Android"
@@ -70,12 +81,12 @@ internal fun rememberNotificationPermissionAction(onGranted: () -> Unit = {}): N
         },
         launch = {
             if (action == PermissionAction.Settings) {
-                context.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName))
+                openSettings()
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         },
+        openSettings = openSettings,
     )
 }
 
@@ -84,7 +95,7 @@ private fun hasNotificationPermission(context: Context): Boolean =
         (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null

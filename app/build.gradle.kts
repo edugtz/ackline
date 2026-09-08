@@ -69,6 +69,13 @@ room {
 }
 
 dependencies {
+    // QR-only scanner: local decode, no image capture or network barcode service.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
+
     // Firebase Messaging (BoM-managed; no firebase-messaging-ktx).
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

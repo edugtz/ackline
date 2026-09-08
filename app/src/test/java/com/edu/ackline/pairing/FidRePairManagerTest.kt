@@ -81,47 +81,15 @@ class FidRePairManagerTest {
     }
 
     @Test
-    fun markUpdatedPersistsClearAndDoesNotScheduleRecovery() {
-        val harness = Harness()
-        harness.manager.onRegistered("A")
-        harness.manager.onRegistered("B")
-        val recoveryEnqueuesBeforeClear = harness.recoveryEnqueues
-
-        assertTrue(harness.manager.markRePairUpdated())
-
-        assertEquals(
-            FidRePairState("B", false),
-            harness.storage.state,
-        )
-        assertEquals(FidRePairState("B", false), harness.updatedStates.single())
-        assertEquals(recoveryEnqueuesBeforeClear, harness.recoveryEnqueues)
-    }
-
-    @Test
-    fun restartAfterExplicitClearRestoresClearState() {
+    fun restartAfterServerConfirmationRestoresClearState() {
         val storage = InMemoryFidRePairStorage()
-        val firstManager = harness(storage).manager
-        firstManager.onRegistered("A")
-        firstManager.onRegistered("B")
-        assertTrue(firstManager.markRePairUpdated())
-
+        val manager = harness(storage).manager
+        manager.onRegistered("A")
+        manager.onRegistered("B")
+        assertTrue(manager.markServerPairingConfirmed("B"))
         val restarted = harness(storage)
         restarted.manager.restore()
-
-        assertEquals(FidRePairState("B", false), restarted.restoredStates.single())
-    }
-
-    @Test
-    fun laterFidChangeRequiresRePairAgainAfterExplicitClear() {
-        val harness = Harness()
-        harness.manager.onRegistered("A")
-        harness.manager.onRegistered("B")
-        assertTrue(harness.manager.markRePairUpdated())
-
-        harness.manager.onRegistered("C")
-
-        assertEquals(FidRePairState("C", true), harness.observedStates.last())
-        assertEquals(3, harness.recoveryEnqueues)
+        assertEquals(FidRePairState("B", false, true, true), restarted.restoredStates.single())
     }
 
     @Test
@@ -138,18 +106,6 @@ class FidRePairManagerTest {
         assertEquals(listOf("A"), harness.registrations)
         assertEquals(2, harness.recoveryEnqueues)
         assertTrue(harness.diagnostics.contains("FID pairing state update failed"))
-    }
-
-    @Test
-    fun failedExplicitClearDoesNotPublishOrReportSuccess() {
-        val storage = InMemoryFidRePairStorage(FidRePairState("B", true))
-        storage.writesSucceed = false
-        val harness = harness(storage)
-
-        assertFalse(harness.manager.markRePairUpdated())
-
-        assertEquals(FidRePairState("B", true), storage.state)
-        assertTrue(harness.updatedStates.isEmpty())
     }
 
     @Test

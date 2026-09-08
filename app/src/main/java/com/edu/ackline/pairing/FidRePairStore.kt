@@ -54,7 +54,6 @@ internal class FidRePairStore(
         val next = when {
             current.lastObservedFid == null -> current.copy(
                 lastObservedFid = observedFid,
-                rePairRequired = false,
             )
 
             current.lastObservedFid == observedFid -> current
@@ -69,19 +68,6 @@ internal class FidRePairStore(
             throw IllegalStateException("FID pairing state could not be persisted")
         }
         next
-    }
-
-    fun markUpdated(): FidRePairState = synchronized(lock) {
-        val current = readCommitted()
-        if (!current.rePairRequired) {
-            current
-        } else {
-            val next = current.copy(rePairRequired = false)
-            if (!writeCommitted(next)) {
-                throw IllegalStateException("FID pairing state could not be persisted")
-            }
-            next
-        }
     }
 
     /** One-shot compatibility exception, never an inference during normal pairing. */

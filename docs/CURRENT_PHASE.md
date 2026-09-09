@@ -15,8 +15,8 @@ Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
 Ackline docs branch: `docs-p2b-closeout` (docs-only closeout; no source changes).
 
-Ackline base: clean `dev` — `4012532a8e146e9d2a3d82d7a6e9785885abbba7`
-(`fix: add scanner accessibility semantics`).
+Ackline base: clean `dev` — `dc066c5ee4346d179334478f789c393fc97da97d`
+(`docs: clarify Ackline and Hermes repository identity`).
 
 Hermes Personal Admin is a separate repository; this docs-only Ackline change does not assert or update its current HEAD.
 
@@ -696,9 +696,15 @@ code, scheduler configuration, or databases.
    `docs/P2B_QA_RESULTS.md` (critical physical path proven and
    owner-accepted; exploratory checks explicitly deferred to normal usage
    and bug-driven follow-up).
-2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
-   executed after the selected post-MVP setup work (P2) is complete and
-   Ackline can be used normally; Ackline/FCM is the sole transport under
-   test — ntfy is rejected, not a fallback.
-3. `ack_server.py` lifecycle/supervision is resolved (see Operational
+2. NEXT — Hermes Personal Admin cleanup — remove remaining legacy ntfy
+   code. ntfy is architecturally rejected/unsupported; cleanup not yet
+   done.
+3. P2C — self-test + minimal health — PLANNED / NOT ACTIVE.
+4. Phase 8 — multi-day real-world Oppo usage/reliability gate — DEFERRED
+   until the selected post-MVP setup work (P2) is complete and Ackline
+   can be used normally; Ackline/FCM is the sole transport under test —
+   ntfy is rejected, not a fallback.
+5. No alternative transport work active — evaluation only if Phase
+   8-or-later evidence demonstrates inadequate Ackline/FCM reliability.
+6. `ack_server.py` lifecycle/supervision is resolved (see Operational
    Follow-Up above).

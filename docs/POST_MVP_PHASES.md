@@ -52,13 +52,14 @@ Do not redesign for novelty or add features unrelated to observed friction.
 
 ## P2 — Better Pairing / Guided Setup
 
-> **STATUS: CURRENT ACTIVE AREA.** Promoted from future roadmap after the P2
-> preflight. Manual FID copy/paste plus adb E2EE staging is the confirmed
-> setup friction. P2 turns setup into a guided pairing experience:
+> **STATUS: CLOSED (P2A/P2B COMPLETE; P2C DEFERRED).** Promoted from future roadmap after the P2
+> preflight. Manual FID copy/paste plus adb E2EE staging was the confirmed
+> setup friction. P2 turned setup into a guided pairing experience:
 > fresh install → notification permission → scan QR → pair/provision
 > → readiness → Inbox — without adb, shell commands, manual FID file
 > editing, or Firebase/Hermes-path knowledge. Automated end-to-end
-> self-test is deferred to P2C.
+> self-test remains a deferred P2C candidate (not implemented, not next
+> mandatory).
 >
 > P2 direction (from preflight, authoritative unless a later plan revises it):
 >
@@ -140,7 +141,7 @@ left unexecuted and are deferred to normal usage and bug-driven follow-up.
 - re-pair flow replacing the manual "Mark as updated" honor-system action;
 - no FID / file-path / Firebase jargon in user-facing copy.
 
-### P2C — Self-test + minimal setup health (PLANNED — still future)
+### P2C — Self-test + minimal setup health (DEFERRED / OPTIONAL — retained candidate, not implemented)
 
 Kept scope: end-to-end self-test + minimal health surface (last push,
 pending ACK count, last ACK sync, last reconciliation, app/build
@@ -316,5 +317,5 @@ ever triggered, stays bounded.
 
 > **CURRENT:** Ackline + FCM is the sole supported production
 > notification path. ntfy is architecturally rejected/unsupported — not a
-> fallback, rollback, or roadmap item; remaining Hermes legacy ntfy code
-> removal is a dedicated cleanup after P2B QA closeout.
+> fallback, rollback, or roadmap item; executable ntfy transport removal is
+> COMPLETE (`22c09ae`; inert historical schema compatibility only).

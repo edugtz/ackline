@@ -7,9 +7,10 @@ Ackline remains a small Android notification inbox.
 Hermes remains the Personal Admin brain and server-side notification source of truth.
 
 Phase 6 changed **only the production outbound transport from Hermes**: the
-outbox now delivers through encrypted FCM (`ACTIVE_TRANSPORT = "fcm"`);
-ntfy is architecturally rejected/unsupported — remaining Hermes legacy
-code is pending a dedicated cleanup after P2B QA closeout.
+outbox delivers through encrypted FCM (historical selector
+`ACTIVE_TRANSPORT = "fcm"`, removed by ntfy cleanup `22c09ae`);
+ntfy is architecturally rejected/unsupported — executable ntfy transport
+removal is COMPLETE (inert historical schema compatibility only; see §12).
 
 Phase 7 (implemented, merged, and PASSED final integration QA) added Hermes
 bounded FCM redelivery as the primary recent-loss safety net, plus
@@ -433,26 +434,25 @@ restart and clears only through an explicit Setup action
 
 ## 12. Transport State After Cutover
 
-FCM is the active production transport:
+FCM is the sole executable production transport (historical selector removed
+by ntfy cleanup `22c09ae`):
 
 ```text
 persistent outbox
        │
        ▼
-explicit transport selector
-   ┌───┴───┐
-   │       │
-  FCM     ntfy
-active   disabled
+FCM sole path
 ```
 
-`notification_state.py` has `ACTIVE_TRANSPORT = "fcm"`.
+Historically `notification_state.py` had `ACTIVE_TRANSPORT = "fcm"` with an
+explicit selector; the selector is removed — FCM is the sole executable
+outbound path.
 
 ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
 option, alternate production transport, or roadmap item. Phase 8
-must test Ackline/FCM alone and must not silently switch to ntfy. Remaining
-Hermes ntfy code/configuration is pending a dedicated cleanup change
-after P2B QA closeout (not yet deleted).
+must test Ackline/FCM alone and must not silently switch to ntfy. Executable
+ntfy transport removal is COMPLETE (`22c09ae`; inert historical schema
+compatibility only).
 
 ---
 
@@ -549,9 +549,9 @@ Hermes queue
 `5b5777a827e097a98687bc6fae0060a2e6fcebb3`), with the canary
 `8304672d700c4056b5d456eae49b6060` retained as historical evidence.
 
-ntfy is architecturally rejected/unsupported — Phase 8 validates
-Ackline/FCM alone with no ntfy fallback; Hermes legacy ntfy code removal
-is a dedicated post-QA cleanup.
+ntfy is architecturally rejected/unsupported — normal use validates
+Ackline/FCM alone with no ntfy fallback; executable ntfy transport removal
+is COMPLETE (inert historical schema compatibility only).
 
 Phase 7 — Recovery and Reconciliation (see `docs/MVP_PHASES.md`) is
 **implemented and merged**; its final architecture is documented in §17.
@@ -818,7 +818,7 @@ configured but post-reboot auto-start has not been physically verified yet.
 > Ackline A1, physically integrated — see `docs/P2A_QA_RESULTS.md`). P2B
 > product UX (H1 operator tooling + A1 onboarding + A2 scanner/re-pair) is
 > COMPLETE on this frozen contract (P2B-QA PASS — see `docs/P2B_QA_RESULTS.md`);
-> P2C remains planned.
+> P2C is DEFERRED / OPTIONAL (retained as candidate, not implemented).
 > Normative P2B package: `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and
 > `docs/P2B_TASKS.md`; `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
@@ -843,8 +843,8 @@ the current E2EE key plus ACK URL in the no-store response
 Phone imports the key, stores the ACK URL, and confirms pairing
 ```
 
-P2B adds the QR operator/scanner UX on this P2A boundary. P2C later adds
-the end-to-end self-test.
+P2B adds the QR operator/scanner UX on this P2A boundary. P2C (deferred
+candidate) would add the end-to-end self-test.
 
 ### 18.2 What stays unchanged
 

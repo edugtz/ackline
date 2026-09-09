@@ -13,8 +13,9 @@ P2B-A1: COMPLETE
 P2B-A2: COMPLETE
 P2B-QA: PASS (critical physical product path, owner-accepted)
 P2B:    COMPLETE
-P2C:    PLANNED / NOT ACTIVE
-Phase 8: DEFERRED
+NTFY CLEANUP: COMPLETE (executable transport removed)
+P2C:    DEFERRED / OPTIONAL (retained candidate, not implemented)
+Phase 8: DEFERRED AS FORMAL GATE (superseded by normal use; not PASS)
 ```
 
 P2B passes because the critical product and architecture path was
@@ -79,12 +80,13 @@ physical end-to-end path above.
 
 ```text
 1. P2B COMPLETE (this closeout)
-2. Dedicated Hermes Personal Admin cleanup to remove remaining legacy ntfy code
-3. P2C self-test + minimal health
-4. Phase 8 multi-day real-world Ackline/FCM reliability gate
-5. Alternative transport investigation only if future reliability evidence requires it
+2. ntfy cleanup COMPLETE (executable ntfy transport removed; inert historical schema compatibility only)
+3. No required feature development — operationalization next
+4. P2C DEFERRED / OPTIONAL (retained candidate, not implemented, not next mandatory)
+5. No manufactured Phase 8 session — normal real-world use provides reliability evidence
+6. Alternative transport investigation only if future reliability evidence requires it
 ```
 
 ntfy remains architecturally rejected, unsupported, not a fallback, not a
-rollback, and not roadmap. Legacy ntfy code removal in Hermes is NEXT —
-it is not claimed as already completed.
+rollback, and not roadmap. Executable ntfy transport removal in Hermes is
+COMPLETE.

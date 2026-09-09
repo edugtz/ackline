@@ -15,8 +15,8 @@ The app has two core responsibilities:
 
 Deliver Hermes alerts through FCM push (replacing the former ntfy + persistent WebSocket path) without requiring the user to manually reopen the app after Wi-Fi/mobile transitions or temporary connectivity loss. ntfy is
 architecturally rejected/unsupported — not a fallback, rollback, or
-roadmap item (remaining Hermes legacy code removal is a dedicated
-post-QA cleanup).
+roadmap item (executable ntfy transport removal is COMPLETE; inert
+historical schema compatibility only).
 
 Target path:
 
@@ -224,7 +224,8 @@ fresh install
 
 Missing notification permission never means `Todo listo`; setup remains
 incomplete while Inbox may remain usable with a permission action. P2B is
-guided setup, QR pairing, and re-pair. P2C, which remains planned, adds the
+guided setup, QR pairing, and re-pair. P2C is DEFERRED / OPTIONAL (retained
+candidate, not implemented) and would add the
 automated end-to-end self-test and minimal health surface.
 
 Tailscale on the phone remains a user-visible prerequisite for

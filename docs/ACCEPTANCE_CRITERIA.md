@@ -189,8 +189,8 @@ Every completed phase must have:
 
 ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
 path, or roadmap item. Phase 8 tests Ackline/FCM alone and must not
-silently switch to ntfy. Remaining Hermes legacy ntfy code removal is a
-dedicated post-QA cleanup (not yet deleted).
+silently switch to ntfy. Executable ntfy transport removal is COMPLETE
+(`22c09ae`; inert historical schema compatibility only).
 
 Phase 8 validates Ackline/FCM as sole transport when:
 

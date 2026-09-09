@@ -5,15 +5,17 @@
 **MVP IMPLEMENTATION: COMPLETE**
 **PHASE 7 COMPLETE — FINAL QA PASS**
 **PHASE 9 COMPLETE — PRODUCT UX ACCEPTED ON PHYSICAL OPPO**
-**PHASE 8 DEFERRED — FINAL REAL-WORLD USAGE / RELIABILITY GATE (not PASS)**
-**POST-MVP P2 — CURRENT ACTIVE AREA (Better Pairing / Guided Setup)**
+**PHASE 8 DEFERRED AS FORMAL GATE — SUPERSEDED BY NORMAL USE (not PASS)**
+**POST-MVP P2 — CLOSED (P2A/P2B COMPLETE; P2C DEFERRED)**
 **P2A — COMPLETE (PASS_WITH_FINDINGS — see docs/P2A_QA_RESULTS.md)**
 **P2B — COMPLETE (H1 + A1 + A2 landed; P2B-QA PASS — critical physical path, owner-accepted; see docs/P2B_QA_RESULTS.md)**
-**P2C — PLANNED / NOT ACTIVE**
+**NTFY CLEANUP — COMPLETE (executable transport removed; see Canonical Transport Decision)**
+**P2C — DEFERRED / OPTIONAL / BUG-OR-FRICTION-DRIVEN (not implemented, not next mandatory)**
+**REQUIRED FEATURE DEVELOPMENT: NONE — NEXT IS OPERATIONALIZATION + NORMAL USE**
 
-Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
+Phase: `Post-P2B operationalization — ntfy cleanup docs closeout (no active feature phase)`
 
-Ackline docs branch: `docs-p2b-closeout` (docs-only closeout; no source changes).
+Ackline docs branch: `docs-ntfy-cleanup-closeout` (docs-only closeout; no source changes).
 
 Ackline base: clean `dev` — `dc066c5ee4346d179334478f789c393fc97da97d`
 (`docs: clarify Ackline and Hermes repository identity`).
@@ -38,7 +40,7 @@ Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICA
 Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout recorded by this documentation change
 ```
 
-Current change: **docs-only P2B final closeout. No source changes.**
+Current change: **docs-only ntfy cleanup closeout. No source changes.**
 
 Current gate: **NONE — P2B is COMPLETE.** P2B-QA passed on the critical
 physical product path with owner acceptance (see `docs/P2B_QA_RESULTS.md`).
@@ -47,17 +49,19 @@ ZXing QR scanner, CAMERA permission flow, production scanner-fed pairing,
 guided onboarding, server-confirmed re-pair, honor-system "Marcar como
 actualizado" removed) is landed and the post-pairing encrypted-FCM →
 native notification → Room exactly-once → local Visto → eventual remote
-ACK path is physically proven. P2C (self-test + minimal health) remains
-planned, not active.
+ACK path is physically proven. P2C (self-test + minimal health) is
+DEFERRED / OPTIONAL / BUG-OR-FRICTION-DRIVEN — not implemented, not next
+mandatory. There is no required feature development; next is
+operationalization + normal use.
 
-Phase 8 — multi-day real-world Oppo usage/reliability gate — is
-**DEFERRED** until Ackline has completed the selected post-MVP
-setup/usability work (P2) and can be used normally. The deferral is
-intentional sequencing, not a failure signal. Phase 8 is NOT marked PASS.
+Phase 8 formal multi-day real-world Oppo gate is **DEFERRED AS A MANUFACTURED
+SESSION and superseded by normal real-world use** — no separate formal test
+window will be manufactured; daily use now provides the reliability evidence.
+Phase 8 is NOT marked PASS.
 The `ack_server.py` lifecycle/supervision operational follow-up is resolved
 (see Operational Follow-Up below).
 
-## Post-MVP P2 — Current Active Area
+## Post-MVP P2 — Closed (P2A/P2B complete; P2C deferred)
 
 P2 turns setup into a guided pairing experience: fresh install →
 notification permission → scan QR → pair/provision → readiness → Inbox —
@@ -69,7 +73,7 @@ roadmap context is in `docs/POST_MVP_PHASES.md`.
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented + physically integrated (PASS_WITH_FINDINGS)
 P2B  guided onboarding + re-pair  COMPLETE (H1 + A1 + A2 landed; P2B-QA PASS — see docs/P2B_QA_RESULTS.md)
-P2C  self-test + minimal health   PLANNED — not active
+P2C  self-test + minimal health   DEFERRED / OPTIONAL / BUG-OR-FRICTION-DRIVEN — retained as candidate, not implemented
 ```
 
 Manual setup paths are legacy/debug fallback, not the normal user path:
@@ -125,14 +129,24 @@ real-world use outside the home previously showed ntfy was not reliable
 enough for these notification requirements.
 
 Historical record stays historical: ntfy existed before the FCM cutover
-(Phase 6/7 history, P2A evidence) — do not rewrite past facts. Production
-Hermes still contains some legacy ntfy code at this moment; its removal is
-PENDING as a dedicated Hermes cleanup change after P2B QA closeout. Do NOT
-claim ntfy implementation is already deleted.
+(Phase 6/7 history, P2A evidence) — do not rewrite past facts. Executable
+ntfy transport removal is COMPLETE in Hermes Personal Admin
+`22c09ae8c6757fb9fdf04df86ebf05eee2f17498` (`refactor: remove legacy ntfy
+transport`): `notify.py` deleted, executable ntfy HTTP publisher removed,
+`ACTIVE_TRANSPORT` / `SUPPORTED_TRANSPORTS` selector removed, ntfy dispatch
+branches removed, FCM is the sole executable outbound path. Only inert
+`ntfy_sequence_id` / `ntfy_message_id` schema compatibility remains because
+the existing production SQLite schema still contains those historical
+columns — no DB migration performed. Operational runtime/service removed
+(`hermes-ntfy` container + network removed, port 2586 no longer listening,
+local `~/.hermes/personal-admin/ntfy` runtime directory removed, obsolete
+`.gitignore` ntfy rules removed). Do NOT claim every textual occurrence of
+the string "ntfy" is gone.
 
-No fallback is implemented or preselected now. Ackline/FCM must first be
-evaluated through real-world use (Phase 8). Only if Phase 8-or-later
-evidence demonstrates unacceptable Ackline/FCM reliability does the
+No fallback is implemented or preselected now. Ackline/FCM is evaluated
+through normal real-world use (Phase 8 formal gate deferred/superseded — see
+below). Only if later reliability evidence demonstrates unacceptable
+Ackline/FCM reliability does the
 project open an alternative-transport investigation; candidates at that
 time MAY include Pushover, Telegram Bot, or another evidence-backed
 option — candidates, not selections. P9 is reframed accordingly
@@ -142,14 +156,15 @@ outcome is that P9 is never needed.
 Canonical near-term order:
 
 ```text
-1. P2B COMPLETE (this closeout)
-2. Hermes Personal Admin cleanup — remove remaining ntfy legacy code
-3. P2C — self-test + minimal health
-4. Phase 8 — multi-day real-world Ackline/FCM reliability gate
-5. Only if reliability evidence is inadequate: evaluate alternatives
+1. P2B COMPLETE
+2. ntfy cleanup COMPLETE (this closeout)
+3. No required feature development — operationalization next (package/organize workspace; consolidate docs/guidelines/skills; evaluate hosting/VPS; evaluate AI-agent delegation; re-evaluate AI models; deploy/migrate as justified; normal use)
+4. P2C — DEFERRED / OPTIONAL / BUG-OR-FRICTION-DRIVEN (retained as candidate, not implemented, not next mandatory)
+5. No manufactured Phase 8 session — normal real-world use provides reliability evidence
+6. Only if reliability evidence is inadequate: evaluate alternatives
 ```
 
-P1, P3, P4, P5-deep, P6, P7, P8 multi-device, and fallback transport work
+P2C, P1, P3, P4, P5-deep, P6, P7, P8 multi-device, and fallback transport work
 are NOT active.
 
 ---
@@ -158,9 +173,10 @@ are NOT active.
 
 Phase 6 — Hermes Outbox / FCM Sender Integration was fully implemented,
 validated against real Firebase and the physical Oppo, and cut over to
-production. `ACTIVE_TRANSPORT = "fcm"` in `notification_state.py`; ntfy
-is architecturally rejected/unsupported — remaining Hermes legacy code
-removal is a dedicated cleanup after P2B QA closeout.
+production (historical selector `ACTIVE_TRANSPORT = "fcm"` in
+`notification_state.py`; selector removed by ntfy cleanup `22c09ae`); ntfy
+is architecturally rejected/unsupported — executable ntfy transport removal
+is COMPLETE (inert historical schema compatibility only).
 
 Hermes final merge:
 
@@ -619,20 +635,21 @@ be confirmed naturally on a future Mac reboot.
 
 ---
 
-## Phase 8 — DEFERRED
+## Phase 8 — DEFERRED AS FORMAL GATE (superseded by normal use; not PASS)
 
-Phase 8 is the **multi-day real-world Oppo replacement gate**. It is
-**DEFERRED** until the MVP product experience is ready for genuine daily
-use.
+Phase 8 was the **multi-day real-world Oppo replacement gate**. A manufactured
+formal session is **NO LONGER REQUIRED** — normal real-world use now provides
+that reliability evidence.
 
 The already-completed Phase 7 baseline (Change G final integration QA)
 remains recorded as readiness evidence, but it does not count as
 executing or passing Phase 8.
 
-It is not required to keep the development Mac running for several days
-solely for a pre-product test window.
+It is not required to manufacture a dedicated multi-day session or to keep
+the development Mac running for several days solely for a pre-product test
+window.
 
-When eventually executed, Phase 8 still validates:
+Normal real-world use now validates (formerly Phase 8 scope):
 
 - Ackline + FCM is the sole notification transport under test;
 - Phase 8 tests Ackline/FCM alone — no ntfy fallback or rollback;
@@ -647,13 +664,14 @@ When eventually executed, Phase 8 still validates:
   fallback.
 
 ntfy is architecturally rejected/unsupported and is not a fallback;
-remaining Hermes legacy ntfy code removal is a dedicated post-QA cleanup.
+executable ntfy transport removal is COMPLETE (see Canonical Transport
+Decision) — inert historical schema compatibility only.
 
 ---
 
 ## Phase 7 Constraints Still in Force (retained)
 
-- ntfy is architecturally rejected/unsupported — not a fallback; Phase 8 validates Ackline/FCM alone;
+- ntfy is architecturally rejected/unsupported — not a fallback; normal use validates Ackline/FCM alone;
 - no constant/aggressive polling;
 - no periodic WorkManager as a recovery path;
 - no generic bidirectional sync engine;
@@ -696,15 +714,24 @@ code, scheduler configuration, or databases.
    `docs/P2B_QA_RESULTS.md` (critical physical path proven and
    owner-accepted; exploratory checks explicitly deferred to normal usage
    and bug-driven follow-up).
-2. NEXT — Hermes Personal Admin cleanup — remove remaining legacy ntfy
-   code. ntfy is architecturally rejected/unsupported; cleanup not yet
-   done.
-3. P2C — self-test + minimal health — PLANNED / NOT ACTIVE.
-4. Phase 8 — multi-day real-world Oppo usage/reliability gate — DEFERRED
-   until the selected post-MVP setup work (P2) is complete and Ackline
-   can be used normally; Ackline/FCM is the sole transport under test —
+2. ntfy cleanup is COMPLETE — executable ntfy transport removed
+   (`22c09ae`); this docs closeout records the alignment. ntfy remains
+   architecturally rejected/unsupported, not a fallback.
+3. No required feature development. P2C — self-test + minimal health — is
+   DEFERRED / OPTIONAL / BUG-OR-FRICTION-DRIVEN (retained as candidate,
+   not implemented, not next mandatory).
+4. No manufactured Phase 8 session — normal real-world use provides
+   reliability evidence; Ackline/FCM is the sole transport under test —
    ntfy is rejected, not a fallback.
-5. No alternative transport work active — evaluation only if Phase
-   8-or-later evidence demonstrates inadequate Ackline/FCM reliability.
-6. `ack_server.py` lifecycle/supervision is resolved (see Operational
+5. Operationalization next (not product feature work): finish ntfy docs
+   closeout; package/organize the system as a proper project/workspace;
+   consolidate docs, operating guidelines, agent instructions and reusable
+   skills; evaluate hosting / VPS options; evaluate how much of Hermes
+   operation can be delegated to an AI agent; re-evaluate available AI
+   models for the actual workloads; deploy / migrate as justified; use in
+   normal life; bugs or friction -> capture -> plan proportional fix ->
+   validate -> repeat.
+6. No alternative transport work active — evaluation only if later
+   reliability evidence demonstrates inadequate Ackline/FCM reliability.
+7. `ack_server.py` lifecycle/supervision is resolved (see Operational
    Follow-Up above).

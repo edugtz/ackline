@@ -17,8 +17,8 @@ Phase: `Post-P2B operationalization — ntfy cleanup docs closeout (no active fe
 
 Ackline docs branch: `docs-ntfy-cleanup-closeout` (docs-only closeout; no source changes).
 
-Ackline base: clean `dev` — `dc066c5ee4346d179334478f789c393fc97da97d`
-(`docs: clarify Ackline and Hermes repository identity`).
+Ackline base: clean `dev` — `e3f29bc317028cb24eaa333eb6284406b362f32b`
+(`docs: align P2B closeout roadmap state`).
 
 Hermes Personal Admin is a separate repository; this docs-only Ackline change does not assert or update its current HEAD.
 
@@ -244,7 +244,7 @@ No delivery receipt protocol.
 No Hermes DB migration.
 No Room migration.
 ntfy is architecturally rejected/unsupported — not a fallback or rollback
-path; Phase 8 tests Ackline/FCM alone.
+path; normal real-world use tests Ackline/FCM alone.
 ```
 
 ### Long-offline model (implemented)
@@ -652,14 +652,14 @@ window.
 Normal real-world use now validates (formerly Phase 8 scope):
 
 - Ackline + FCM is the sole notification transport under test;
-- Phase 8 tests Ackline/FCM alone — no ntfy fallback or rollback;
+- normal real-world use tests Ackline/FCM alone — no ntfy fallback or rollback;
 - normal multi-day Oppo use;
 - screen off / overnight;
 - Wi-Fi/mobile transitions;
 - ColorOS / Doze behavior;
 - ACK / recovery behavior;
 - natural Hermes alerts;
-- if Phase 8 exposes reliability problems, the path is to improve
+- if real-world use exposes reliability problems, the path is to improve
   Ackline/FCM or evaluate another alternative — ntfy is not an approved
   fallback.
 

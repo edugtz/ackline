@@ -449,8 +449,8 @@ explicit selector; the selector is removed — FCM is the sole executable
 outbound path.
 
 ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
-option, alternate production transport, or roadmap item. Phase 8
-must test Ackline/FCM alone and must not silently switch to ntfy. Executable
+option, alternate production transport, or roadmap item. Normal real-world use
+tests Ackline/FCM alone (former Phase 8 scope) and must not silently switch to ntfy. Executable
 ntfy transport removal is COMPLETE (`22c09ae`; inert historical schema
 compatibility only).
 

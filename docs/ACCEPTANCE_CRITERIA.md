@@ -188,11 +188,11 @@ Every completed phase must have:
 ## 10. Replacement Gate
 
 ntfy is architecturally rejected/unsupported — NOT a fallback, rollback
-path, or roadmap item. Phase 8 tests Ackline/FCM alone and must not
+path, or roadmap item. Normal real-world use tests Ackline/FCM alone and must not
 silently switch to ntfy. Executable ntfy transport removal is COMPLETE
 (`22c09ae`; inert historical schema compatibility only).
 
-Phase 8 validates Ackline/FCM as sole transport when:
+Normal real-world use validates Ackline/FCM as sole transport (former Phase 8 scope) when:
 
 ```text
 transport reliability PASS

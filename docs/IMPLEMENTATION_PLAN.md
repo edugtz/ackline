@@ -2,14 +2,14 @@
 
 ## Status
 
-**ACTIVE PLAN — P2B-QA (P2B implementation complete; QA gate active).**
+**CLOSED — P2B COMPLETE (P2B-QA PASS on critical physical path; see docs/P2B_QA_RESULTS.md).**
 
 Area: `Post-MVP P2 — Better Pairing / Guided Setup`
 Slice: `P2B — guided onboarding + re-pair UX`
 
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented and physically integrated
-P2B  guided onboarding + re-pair  IMPLEMENTATION COMPLETE (H1 + A1 + A2 landed) — P2B-QA ACTIVE GATE
+P2B  guided onboarding + re-pair  COMPLETE (H1 + A1 + A2 landed; P2B-QA PASS — see docs/P2B_QA_RESULTS.md)
 P2C  self-test + minimal health   PLANNED — not active
 ```
 
@@ -61,8 +61,8 @@ primitives, Room schema, Hermes notification schema, ACK/recovery behavior,
 or transport architecture.
 
 Implementation order and exact file/test scopes remain in `docs/P2B_PLAN.md`
-and `docs/P2B_TASKS.md`. H1, A1, and A2 are landed; the remaining gate is the physical Oppo
-product gate (P2B-QA, partial evidence only — NOT PASS).
+and `docs/P2B_TASKS.md`. H1, A1, and A2 are landed; P2B-QA has passed on the
+critical physical path (see `docs/P2B_QA_RESULTS.md`).
 
 ## Validation
 

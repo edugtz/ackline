@@ -114,7 +114,7 @@ copy are now legacy/debug fallback, not the normal path.
   `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and `docs/P2B_TASKS.md`;
   `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 
-### P2B — Guided onboarding + re-pair (IMPLEMENTATION COMPLETE — P2B-QA ACTIVE GATE)
+### P2B — Guided onboarding + re-pair (COMPLETE — P2B-QA PASS; see docs/P2B_QA_RESULTS.md)
 
 Landed scope: guided first-run setup (Bienvenido → permission →
 Tailscale prerequisite → scan QR → pair/provision → readiness → Inbox),
@@ -126,11 +126,14 @@ workflow is out of normal UX; operator-friendly pairing initiation on the
 Hermes side. No P2C self-test beyond placeholder/navigation; no key
 rotation (P3); no deeper diagnostics (P5); no multi-device (P8).
 
-P2B itself is NOT COMPLETE: P2B-QA is the mandatory physical product
-gate (partial evidence only — real scanner, fresh-QR transport,
-`replace_required` mapping, replacement QR, server-confirmed replacement,
-and Listo → Inbox proven; encrypted FCM canary, native notification, Room
-exactly-once, and Visto → remote ACK still pending).
+P2B is COMPLETE: P2B-QA passed on the critical physical product path with
+owner acceptance (see `docs/P2B_QA_RESULTS.md`). Previously proven: real
+scanner, fresh-QR transport, `replace_required` mapping, replacement QR,
+server-confirmed replacement, and Listo → Inbox; now also proven: encrypted
+FCM canary, native notification, Room exactly-once, and Visto → remote ACK
+(canary `a82fc904319b4b77a6db8e498f972432`). Exploratory checks (camera /
+permission / ColorOS variants, font/accessibility matrix) were deliberately
+left unexecuted and are deferred to normal usage and bug-driven follow-up.
 
 - first-run wizard (Bienvenido → permission → scan QR → pair/provision → readiness);
 - JSON v1 QR-only in P2B v1; short code is deferred to optional P2B.1;

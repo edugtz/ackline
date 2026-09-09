@@ -207,7 +207,7 @@ product/UX acceptance PASS
 final GitHub review PASS
 ```
 
-## 11. Pairing Acceptance (Post-MVP P2 — P2A proven; P2B implementation complete; P2B-QA active)
+## 11. Pairing Acceptance (Post-MVP P2 — P2A proven; P2B COMPLETE — P2B-QA PASS, see docs/P2B_QA_RESULTS.md)
 
 P2A status: IMPLEMENTED and physically integrated
 (`docs/P2A_QA_RESULTS.md` — PASS_WITH_FINDINGS). Proven in P2A:
@@ -239,7 +239,7 @@ NOT PROVEN in the P2A physical run (not failed, not blocking):
   P2B places notification-permission onboarding before pairing / future
   setup verification.
 
-P2B acceptance (P2B implementation landed; applies fully once P2B-QA passes):
+P2B acceptance (P2B landed and P2B-QA passed on the critical physical path — see docs/P2B_QA_RESULTS.md):
 
 These add to — and never weaken — the security/reliability criteria above.
 

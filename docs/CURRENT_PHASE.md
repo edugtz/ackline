@@ -8,13 +8,12 @@
 **PHASE 8 DEFERRED — FINAL REAL-WORLD USAGE / RELIABILITY GATE (not PASS)**
 **POST-MVP P2 — CURRENT ACTIVE AREA (Better Pairing / Guided Setup)**
 **P2A — COMPLETE (PASS_WITH_FINDINGS — see docs/P2A_QA_RESULTS.md)**
-**P2B IMPLEMENTATION — COMPLETE (H1 + A1 + A2 landed)**
-**P2B-QA — CURRENT ACTIVE GATE (mandatory physical product gate; partial evidence only, NOT PASS)**
-**P2C — PLANNED**
+**P2B — COMPLETE (H1 + A1 + A2 landed; P2B-QA PASS — critical physical path, owner-accepted; see docs/P2B_QA_RESULTS.md)**
+**P2C — PLANNED / NOT ACTIVE**
 
 Phase: `Post-MVP P2 — Better Pairing / Guided Setup`
 
-Ackline docs branch: `docs-p2b-qa-ntfy-roadmap` (docs-only alignment; no source changes).
+Ackline docs branch: `docs-p2b-closeout` (docs-only closeout; no source changes).
 
 Ackline base: clean `dev` — `4012532a8e146e9d2a3d82d7a6e9785885abbba7`
 (`fix: add scanner accessibility semantics`).
@@ -39,15 +38,17 @@ Change G1 Explicit Tailnet HTTPS VPN Binding    IMPLEMENTED / REVIEWED / PHYSICA
 Change G  Final Integration QA / Docs Closeout  PASS — documentation closeout recorded by this documentation change
 ```
 
-Current change: **docs-only canonical alignment (P2B-QA status + ntfy roadmap decision). No source changes.**
+Current change: **docs-only P2B final closeout. No source changes.**
 
-Current gate: **P2B-QA — mandatory physical product gate**
-(see `docs/P2B_PLAN.md` P2B-QA section and `docs/P2B_TASKS.md` PHYSICAL QA).
+Current gate: **NONE — P2B is COMPLETE.** P2B-QA passed on the critical
+physical product path with owner acceptance (see `docs/P2B_QA_RESULTS.md`).
 P2B implementation (Hermes H1 + Ackline A1 + Ackline A2: real CameraX +
 ZXing QR scanner, CAMERA permission flow, production scanner-fed pairing,
 guided onboarding, server-confirmed re-pair, honor-system "Marcar como
-actualizado" removed) is landed. P2B itself is NOT complete until QA
-passes. P2C (self-test + minimal health) remains planned, not active.
+actualizado" removed) is landed and the post-pairing encrypted-FCM →
+native notification → Room exactly-once → local Visto → eventual remote
+ACK path is physically proven. P2C (self-test + minimal health) remains
+planned, not active.
 
 Phase 8 — multi-day real-world Oppo usage/reliability gate — is
 **DEFERRED** until Ackline has completed the selected post-MVP
@@ -67,7 +68,7 @@ roadmap context is in `docs/POST_MVP_PHASES.md`.
 
 ```text
 P2A  pairing backend/protocol     COMPLETE — implemented + physically integrated (PASS_WITH_FINDINGS)
-P2B  guided onboarding + re-pair  IMPLEMENTATION COMPLETE (H1 + A1 + A2 landed) — P2B-QA ACTIVE GATE
+P2B  guided onboarding + re-pair  COMPLETE (H1 + A1 + A2 landed; P2B-QA PASS — see docs/P2B_QA_RESULTS.md)
 P2C  self-test + minimal health   PLANNED — not active
 ```
 
@@ -80,46 +81,32 @@ Phase 9 visual identity is retained.
 
 ---
 
-## P2B-QA — Current Active Gate (PARTIAL EVIDENCE — NOT PASS)
+## P2B-QA — CLOSED (PASS — critical physical path, owner-accepted)
 
-P2B implementation is COMPLETE = H1 (Hermes QR operator tooling) + A1
-(onboarding/durable pairing foundation) + A2 (real QR scanner + re-pair +
-hardening) landed. **P2B itself is NOT COMPLETE** — P2B-QA is the
-mandatory physical product gate and has NOT passed.
+P2B is COMPLETE. P2B-QA passed on the critical physical product path with
+owner acceptance for normal use. Full evidence: `docs/P2B_QA_RESULTS.md`.
 
-Physically proven so far (partial/current evidence only):
+Physically proven (critical path):
 
 ```text
-real scanner                 PASS
-fresh QR transport           PASS
-replace_required mapping     PASS
-replacement QR               PASS
-server-confirmed replacement PASS
-Listo -> Inbox               PASS
+real Hermes terminal QR scan; replace_required UX; replacement QR pairing;
+server-confirmed pairing; Listo -> Inbox; real encrypted FCM after pairing;
+delivery while Tailscale was OFF; native Android notification physically
+observed; notification persisted in Ackline; duplicate delivery of same
+notification_id did not create a duplicate; local Visto while Tailnet
+unavailable; Hermes remained unacknowledged while Tailscale was OFF; remote
+Hermes ACK succeeded after Tailscale was restored (canary
+a82fc904319b4b77a6db8e498f972432).
 ```
 
-Concretely: a real Hermes terminal QR scanned on the physical Oppo; a
-fresh pairing QR against a different registered installation produced the
-expected `replace_required` flow with the approved replacement-QR UX (no
-FID, Firebase terminology, CLI syntax, secret paths, token, or session
-data exposed); a real `pairing-begin --qr --replace` replacement QR was
-scanned; replacement pairing completed; Ackline reached "Listo"; the user
-entered the normal Personal Admin Inbox afterward.
+Deliberately unexecuted exploratory checks (NOT blockers, NOT marked
+executed — deferred to normal usage and bug-driven follow-up): exhaustive
+ColorOS permission variants, repeated camera lifecycle permutations,
+font-size permutations, extended accessibility/manual matrix.
 
-Still pending before P2B closeout (at least):
-
-```text
-real encrypted FCM canary after pairing
-physical native notification presentation with POST_NOTIFICATIONS granted
-Room exactly-once confirmation
-Visto/local ACK -> Hermes remote acknowledged state
-remaining camera lifecycle / permission / ColorOS behavior checks
-light/dark/large-font/accessibility sanity per the P2B-QA plan
-```
-
-Do NOT claim P2B full QA PASS, P2B COMPLETE, or native post-pairing FCM
-notification proven. Do not expand QA scope beyond the approved plan
-(`docs/P2B_PLAN.md` P2B-QA, `docs/P2B_TASKS.md` PHYSICAL QA).
+P2B passes because the critical product and architecture path was physically
+proven and accepted by the owner — not because every exploratory checklist
+case was executed.
 
 ---
 
@@ -155,12 +142,11 @@ outcome is that P9 is never needed.
 Canonical near-term order:
 
 ```text
-1. P2B-QA — finish physical product gate (CURRENT)
-2. P2B closeout
-3. Hermes Personal Admin cleanup — remove remaining ntfy legacy code
-4. P2C — self-test + minimal health
-5. Phase 8 — multi-day real-world Ackline/FCM reliability gate
-6. Only if reliability evidence is inadequate: evaluate alternatives
+1. P2B COMPLETE (this closeout)
+2. Hermes Personal Admin cleanup — remove remaining ntfy legacy code
+3. P2C — self-test + minimal health
+4. Phase 8 — multi-day real-world Ackline/FCM reliability gate
+5. Only if reliability evidence is inadequate: evaluate alternatives
 ```
 
 P1, P3, P4, P5-deep, P6, P7, P8 multi-device, and fallback transport work
@@ -706,16 +692,10 @@ code, scheduler configuration, or databases.
 
 ## Next Step
 
-1. Finish **P2B-QA — the mandatory physical product gate** per
-   `docs/P2B_PLAN.md` (P2B-QA) and `docs/P2B_TASKS.md` (PHYSICAL QA).
-   P2B implementation (H1 + A1 + A2) is landed. Partial evidence so far:
-   real scanner PASS, fresh-QR transport PASS, `replace_required` mapping
-   PASS, replacement QR PASS, server-confirmed replacement PASS,
-   Listo → Inbox PASS. Still pending: real encrypted FCM canary after
-   pairing, native notification with `POST_NOTIFICATIONS` granted, Room
-   exactly-once, Visto → Hermes remote-acknowledged, remaining camera /
-   permission / ColorOS checks, light/dark/large-font/accessibility sanity.
-   Do NOT mark P2B COMPLETE until QA passes.
+1. P2B is COMPLETE — no further P2B-QA gate work. Full evidence:
+   `docs/P2B_QA_RESULTS.md` (critical physical path proven and
+   owner-accepted; exploratory checks explicitly deferred to normal usage
+   and bug-driven follow-up).
 2. Phase 8 — multi-day real-world Oppo usage/reliability gate — will be
    executed after the selected post-MVP setup work (P2) is complete and
    Ackline can be used normally; Ackline/FCM is the sole transport under

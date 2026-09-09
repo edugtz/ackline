@@ -2,7 +2,7 @@
 
 ## Status
 
-**BUILD PLAN — P2B (implementation COMPLETE; P2B-QA gate ACTIVE).**
+**BUILD PLAN — P2B (CLOSED — implementation COMPLETE, P2B-QA PASS; see docs/P2B_QA_RESULTS.md).**
 Implements `docs/P2B_SPEC.md` on the frozen
 P2A contract (Hermes H1 + Ackline A1, `docs/P2A_QA_RESULTS.md`).
 Execution checklist: `docs/P2B_TASKS.md`.
@@ -14,12 +14,10 @@ P2B-A2  Scanner / re-pair / hardening   (+ CameraX/ZXing deps)
 P2B-QA  Physical Oppo product gate      (mandatory before PASS)
 ```
 
-Status: **H1 COMPLETE. A1 COMPLETE. A2 COMPLETE. P2B-QA ACTIVE (partial
-physical evidence only — NOT PASS).** (The planning-review gate,
+Status: **H1 COMPLETE. A1 COMPLETE. A2 COMPLETE. P2B-QA PASS (critical
+physical path, owner-accepted). P2B COMPLETE.** (The planning-review gate,
 H1-before-integration, and A1-before-A2 sequencing below are landed
-history, retained for the record.) A2 cannot PASS without physical Oppo
-QA. P2B cannot COMPLETE with native notification still unproven after
-permission is granted.**
+history, retained for the record.) Full evidence: `docs/P2B_QA_RESULTS.md`.
 
 P2A is not redesigned. No protocol, crypto, Room, or Hermes-DB change.
 Expected DB migration: **none**.
@@ -281,19 +279,20 @@ Physical Oppo QA mandatory (see P2B-QA).
 
 ---
 
-## P2B-QA — Product Gate (Mandatory) — ACTIVE (partial evidence, NOT PASS)
+## P2B-QA — Product Gate (CLOSED — PASS, critical physical path)
 
-Proven so far (partial/current evidence only): real scanner PASS;
-fresh-QR transport PASS; `replace_required` mapping PASS (approved
-replacement-QR UX — no FID, Firebase terminology, CLI syntax, secret
-paths, token, or session data exposed); replacement QR PASS;
-server-confirmed replacement PASS; Listo → Inbox PASS.
-
-Still pending: real encrypted FCM canary after pairing; native
-notification with `POST_NOTIFICATIONS` granted; Room exactly-once;
-Visto → Hermes remote-acknowledged; remaining camera lifecycle /
-permission / ColorOS checks; light/dark/large-font/accessibility sanity
-per the approved plan. P2B is NOT COMPLETE until this gate passes.
+Closed: critical physical path proven and owner-accepted (see
+`docs/P2B_QA_RESULTS.md`): real scanner; fresh-QR transport;
+`replace_required` mapping (approved replacement-QR UX — no FID, Firebase
+terminology, CLI syntax, secret paths, token, or session data exposed);
+replacement QR; server-confirmed replacement; Listo → Inbox; real encrypted
+FCM canary after pairing; native notification with `POST_NOTIFICATIONS`
+granted; Room exactly-once; Visto → Hermes remote-acknowledged (local Visto
+while Tailnet unavailable, remote ACK after restore; canary
+a82fc904319b4b77a6db8e498f972432). Exploratory checks (camera lifecycle /
+permission / ColorOS variants, light/dark/large-font/accessibility matrix)
+were deliberately left unexecuted and are deferred to normal usage and
+bug-driven follow-up — NOT marked executed. P2B is COMPLETE.
 
 Full matrix (normative — unchecked items remain open):
 

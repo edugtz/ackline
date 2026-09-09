@@ -817,7 +817,8 @@ configured but post-reboot auto-start has not been physically verified yet.
 > This section documents the implemented P2A boundary (Hermes H1 +
 > Ackline A1, physically integrated — see `docs/P2A_QA_RESULTS.md`). P2B
 > product UX (H1 operator tooling + A1 onboarding + A2 scanner/re-pair) is
-> implemented on this frozen contract and is in P2B-QA; P2C remains planned.
+> COMPLETE on this frozen contract (P2B-QA PASS — see `docs/P2B_QA_RESULTS.md`);
+> P2C remains planned.
 > Normative P2B package: `docs/P2B_SPEC.md`, `docs/P2B_PLAN.md`, and
 > `docs/P2B_TASKS.md`; `docs/IMPLEMENTATION_PLAN.md` is the concise index.
 

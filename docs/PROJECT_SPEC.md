@@ -201,7 +201,7 @@ MVP setup may expose:
 
 Do not turn setup into an operations dashboard.
 
-### 9.4 Guided Pairing (Post-MVP P2 — P2A implemented, P2B implementation complete, P2B-QA active)
+### 9.4 Guided Pairing (Post-MVP P2 — P2A implemented, P2B COMPLETE — see docs/P2B_QA_RESULTS.md)
 
 Normal user setup must not require:
 
@@ -236,13 +236,14 @@ re-pairing an existing installation requires explicit replace intent.
 P2A capability (protocol + provisioning foundation): IMPLEMENTED
   (Hermes H1 + Ackline A1, physically integrated —
   see docs/P2A_QA_RESULTS.md).
-P2B product UX (onboarding wizard, QR scan, re-pair): IMPLEMENTATION
-COMPLETE (H1 + A1 + A2 landed); P2B-QA active gate (partial evidence,
-NOT PASS).
+P2B product UX (onboarding wizard, QR scan, re-pair): COMPLETE
+(H1 + A1 + A2 landed; P2B-QA PASS on critical physical path — see
+docs/P2B_QA_RESULTS.md).
 ```
 
 The P2B UX (guided onboarding, real QR scanner, server-confirmed re-pair;
-honor-system action removed) is implemented and in physical QA. Manual FID
+honor-system action removed) is implemented and closed (P2B-QA PASS — see
+docs/P2B_QA_RESULTS.md). Manual FID
 copy and adb key staging are legacy/debug fallback only; normal setup uses
 guided P2 pairing.
 

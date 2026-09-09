@@ -128,7 +128,7 @@ SPEC §11 P2C boundary     → enforced at every review
       ordering, §5 strictness, §7 completeness) and P2C exclusion.
 - [ ] ChatGPT + GitHub verdict recorded (`PASS` required).
 
-## A2 — Scanner / re-pair / hardening (Ackline branch off `dev`) — COMPLETE (implementation landed; PASS requires P2B-QA below)
+## A2 — Scanner / re-pair / hardening (Ackline branch off `dev`) — COMPLETE (implementation landed; P2B-QA PASS — see docs/P2B_QA_RESULTS.md)
 
 - [ ] Deps: CameraX (core/camera2/lifecycle/view) + `zxing-core` in
       `gradle/libs.versions.toml` + `app/build.gradle.kts`; versions
@@ -152,8 +152,8 @@ SPEC §11 P2C boundary     → enforced at every review
       full regression gate green.
 - [ ] **GATE — A2 REVIEW:** independent review (deps minimal, secrets
       audit, P2C check) → physical QA must already be scheduled →
-      user commit/push → ChatGPT + GitHub review; **`PASS` requires
-      completed P2B-QA below.**
+      user commit/push → ChatGPT + GitHub review; **P2B-QA has passed on the
+      critical physical path (see docs/P2B_QA_RESULTS.md).**
 
 ## A2 REVIEW
 
@@ -161,9 +161,9 @@ SPEC §11 P2C boundary     → enforced at every review
       no Room/DB migration (A1 private-state bootstrap remains required), no contract drift, redaction asserts green.
 - [ ] Logcat pre-screen: no token/FID/key in normal logs.
 
-## PHYSICAL QA — Oppo product gate (blocks A2 PASS and P2B COMPLETE) — ACTIVE (partial evidence, NOT PASS)
+## PHYSICAL QA — Oppo product gate (CLOSED — PASS on critical path; exploratory checks deferred — see docs/P2B_QA_RESULTS.md)
 
-Proven so far (partial/current evidence only):
+Proven (critical path — owner-accepted):
 
 - [x] real Hermes terminal QR scanned on physical Oppo
 - [x] fresh pairing QR against a different registered installation → expected `replace_required` flow
@@ -171,8 +171,19 @@ Proven so far (partial/current evidence only):
 - [x] real `pairing-begin --qr --replace` replacement QR scanned
 - [x] replacement pairing completed; Ackline reached "Listo"
 - [x] user entered the normal Personal Admin Inbox afterward
+- [x] real encrypted FCM canary after pairing (canary `a82fc904319b4b77a6db8e498f972432`)
+- [x] delivery while Tailscale was OFF; native notification physically observed
+- [x] notification persisted in Ackline; duplicate delivery did not create a duplicate
+- [x] local Visto while Tailnet unavailable; Hermes unacknowledged until Tailscale restored; remote ACK then succeeded
 
-Still pending — checklist below remains normative (unchecked items are open):
+Deliberately unexecuted (NOT blockers, NOT marked executed — deferred to normal usage / bug-driven follow-up):
+
+- [ ] exhaustive ColorOS permission variants — deferred
+- [ ] repeated camera lifecycle permutations — deferred
+- [ ] font-size permutations — deferred
+- [ ] extended accessibility/manual matrix — deferred
+
+Checklist below retained as history (unchecked items are deferred, not open gates):
 
 - [ ] First install: onboarding route; permission grant AND denial
       runs; successful pairing after denial enters Inbox with incomplete status
@@ -200,12 +211,9 @@ Still pending — checklist below remains normative (unchecked items are open):
 
 ## DOCS CLOSEOUT
 
-- [ ] Update `docs/CURRENT_PHASE.md` (P2B-QA active-gate status + partial
-      evidence now; P2B PASS + full evidence pointer only after QA completes)
+- [x] Update `docs/CURRENT_PHASE.md` (P2B COMPLETE + P2B-QA PASS critical path; see docs/P2B_QA_RESULTS.md)
       only to reflect landed behavior; no architecture churn.
-- [ ] Record QA evidence pointer (`docs/P2B_QA_RESULTS.md` only if the
-      project convention from P2A applies; otherwise inline in phase
-      closeout).
+- [x] Record QA evidence pointer (`docs/P2B_QA_RESULTS.md`).
 - [ ] Suggested commit message for the final merge, e.g.
       `feat: add guided pairing onboarding and re-pair flow`.
 - [ ] Confirm SPEC→PLAN→TASKS consistency: JSON v1, QR-only, no short
